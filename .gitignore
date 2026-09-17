@@ -1,0 +1,75 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+backend/env/
+backend/venv/
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Node.js / React Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.oxlintrc.json
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# SQLite / Database / Cache
+*.db
+*.sqlite3
+database/postgres/data/
+memory/chroma/data/
+
+# Model Files & Large Binaries (usually stored outside Git)
+*.onnx
+*.onnx.json
+*.tar.bz2
+*.tar.gz
+*.zip
+*.bin
+*.model
+backend/models/piper/**/*.onnx
+backend/models/piper/**/*.json
+backend/models/sherpa/**/*.onnx
+backend/models/sherpa/**/*.txt
+
+# Audio Output/Generated/Temp files
+*.wav
+*.mp3
+backend/app/tamil_direct.wav
+backend/app/tamil_test.wav

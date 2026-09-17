@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "mappings": [
+    {
+      "keyword": "unlock my laptop",
+      "password_hash": "$2b$12$.2z5prA9OLtGFP7XEnerVe8gZx.7spUkqnsrc2wHufcbeQbiA1lGG"
+    }
+  ],
+  "session_unlocked": true
+}

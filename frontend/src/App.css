@@ -1,0 +1,440 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --jarvis-bg: #010409;
+  --jarvis-panel-bg: rgba(0, 0, 1, 0.88);
+  --jarvis-border: rgba(0, 238, 255, 0.567);
+  --jarvis-cyan: #00f0ff;
+  --jarvis-teal: #00b4d8;
+  --jarvis-blue: #00f0ff;
+  --jarvis-text: #e2e8f0;
+  --jarvis-muted: #8ab4f8;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Share Tech Mono', 'Inter', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100vh;
+  width: 100vw;
+  background: var(--jarvis-bg);
+  color: var(--jarvis-text);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.jarvis-root-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at 50% 30%, rgba(0, 255, 145, 0.18) 0%, rgba(1, 4, 9, 0.99) 80%);
+  position: relative;
+  overflow: hidden;
+  padding: 10px;
+  gap: 10px;
+}
+
+/* Glassmorphism Panel */
+.jarvis-glass-card {
+  background: var(--jarvis-panel-bg);
+  border: 1px solid var(--jarvis-border);
+  border-radius: 8px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+/* 1. Left Sidebar */
+.jarvis-sidebar {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.jarvis-logo-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+.jarvis-logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid var(--jarvis-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 10px var(--jarvis-cyan);
+}
+
+.jarvis-logo-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--jarvis-cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+}
+
+.jarvis-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+}
+
+.jarvis-nav-item {
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--jarvis-muted);
+  background: rgba(0, 255, 208, 0.05);
+  border: 1px solid rgba(0, 255, 128, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.jarvis-nav-item:hover,
+.jarvis-nav-item.active {
+  background: rgba(0, 255, 149, 0.18);
+  border-color: rgba(0, 240, 255, 0.45);
+  color: var(--jarvis-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+/* Main Command Center Workspace */
+.jarvis-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  height: 100%;
+}
+
+.jarvis-top-header {
+  height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* Panel Cards */
+.jarvis-panel-box {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.jarvis-panel-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--jarvis-cyan);
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+  padding-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Central AI Core Box */
+.jarvis-central-core {
+  background-image: radial-gradient(rgba(0, 240, 255, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+  max-width: 810px;
+  height: 220px;
+  max-height: 720px;
+  padding: 5px;
+  margin: 0 auto;
+  align-self: center;
+  width: 100%;
+  transform: translateY(0px);
+}
+
+.jarvis-sphere-container {
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 240, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.3), inset 0 0 25px rgba(0, 119, 255, 0.4);
+  animation: corePulse 4s ease-in-out infinite;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 119, 255, 0.22) 0%, rgba(1, 4, 10, 0.95) 75%);
+}
+
+.jarvis-sphere-container::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 240, 255, 0.5);
+  animation: coreSpin 15s linear infinite;
+}
+
+@keyframes coreSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes corePulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 30px rgba(0, 240, 255, 0.25);
+  }
+
+  50% {
+    box-shadow: 0 0 55px rgba(0, 240, 255, 0.55);
+  }
+}
+
+/* Attractive Circular System Monitor Gauges */
+/* Concentric Sci-Fi Ring System Monitor Gauges */
+/* Concentric Sci-Fi Ring System Monitor Gauges */
+.jarvis-gauge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.jarvis-concentric-ring {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  animation: gaugePulse 3s ease-in-out infinite alternate;
+}
+
+.jarvis-concentric-ring::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 240, 255, 0.4);
+  animation: ringSpin 12s linear infinite;
+}
+
+.jarvis-ring-layer-2 {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(1, 4, 10, 0.9);
+}
+
+.jarvis-gauge-inner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #020814 0%, #010409 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 6px rgba(0, 240, 255, 0.25);
+  padding: 1px;
+}
+
+.gauge-title {
+  font-size: 7.5px;
+  color: #8ab4f8;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.gauge-val {
+  font-size: 9.5px;
+  color: #fff;
+  font-weight: bold;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+.gauge-val-small {
+  font-size: 7.5px;
+  color: #fff;
+  font-weight: bold;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+.gauge-val-tiny {
+  font-size: 7px;
+  color: #fff;
+  font-weight: bold;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+.gpu-subtitle {
+  font-size: 5.5px;
+  color: #00f0ff;
+  font-weight: bold;
+  margin-top: 1px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+@keyframes ringSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gaugePulse {
+  0% {
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+  }
+
+  100% {
+    box-shadow: 0 0 16px rgba(0, 240, 255, 0.45);
+  }
+}
+
+/* Bottom Voice Control Bar */
+.jarvis-bottom-bar {
+  height: 60px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* Form & Input styling */
+.jarvis-input-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.jarvis-input {
+  background: rgba(1, 4, 10, 0.9);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #fff;
+  font-size: 0.8rem;
+  outline: none;
+  width: 280px;
+}
+
+.jarvis-input:focus {
+  border-color: var(--jarvis-cyan);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.jarvis-btn-exec {
+  background: var(--jarvis-cyan);
+  color: #010409;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 0.7rem;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.jarvis-btn-exec:hover {
+  box-shadow: 0 0 10px var(--jarvis-cyan);
+}
+
+.friday-glow-border {
+  animation: flowBorder 4s ease infinite;
+}
+
+@keyframes flowBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes bounce {
+
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+
+  40% {
+    transform: scale(1.0);
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(1, 4, 10, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.3);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.6);
+}

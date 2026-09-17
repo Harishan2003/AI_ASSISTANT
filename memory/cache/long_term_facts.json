@@ -1,0 +1,32 @@
+{
+  "facts": [
+    {
+      "fact_id": "fact_ad5ae7c9",
+      "fact": "number 5",
+      "category": "user_preference",
+      "user_id": "Harishan",
+      "created_at": 1789547942.2530284,
+      "metadata": {
+        "fact_id": "fact_ad5ae7c9",
+        "category": "user_preference",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1789547942.2530284
+      }
+    },
+    {
+      "fact_id": "fact_d628a473",
+      "fact": "the number 5",
+      "category": "user_preference",
+      "user_id": "Harishan",
+      "created_at": 1789549445.0197248,
+      "metadata": {
+        "fact_id": "fact_d628a473",
+        "category": "user_preference",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1789549445.0197248
+      }
+    }
+  ]
+}
