@@ -467,5 +467,189 @@
     "reply": "Hello! I am Friday, Harishan's personal AI Assistant. You're welcome! Let me know if you need anything else.",
     "is_urgent": false,
     "read": true
+  },
+  {
+    "timestamp": "2026-09-17 12:52:32",
+    "sender": "Dinesh(krct)",
+    "message": "\ud83e\udd1d",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-17 13:21:48",
+    "sender": "Dinesh(krct)",
+    "message": "\ud83e\udd1d",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. i will call u later",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-17 13:22:36",
+    "sender": "Dinesh(krct)",
+    "message": "\ud83e\udd1d",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-17 13:54:14",
+    "sender": "Dinesh(krct)",
+    "message": "\ud83e\udd1d",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-17 13:56:10",
+    "sender": "Dinesh(krct)",
+    "message": "\ud83e\udd1d",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-17 17:26:11",
+    "sender": "Amma No: 1",
+    "message": "Hai",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi there! How can I assist you today?",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-18 02:16:21",
+    "sender": "Amma No: 1",
+    "message": "Hlo",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hello! I\u2019ve noted your message and will let Harishan know\u2014he\u2019s currently engaged in work and will get back to you shortly.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-18 02:17:06",
+    "sender": "Amma No: 1",
+    "message": "I need to talk with him urgently",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. I\u2019ve marked your request as HIGH PRIORITY and immediately flagged it for Harishan. He\u2019s currently engaged in work, but I\u2019ll make sure he sees your urgent message right away. He\u2019ll get back to you as soon as possible.",
+    "is_urgent": true,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-18 02:21:43",
+    "sender": "Amma No: 1",
+    "message": "Ena pannura",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi, naan unga message note pannitu Harishan\u2011kku forward panren. Avan ippo work\u2011la busy irukanga, soon thiruppi varuven.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-18 02:22:49",
+    "sender": "Amma No: 1",
+    "message": "Ena pannura",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. I\u2019ve noted your message and forwarded it to Harishan. He\u2019s currently busy with work but will get back to you as soon as possible.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-18 02:23:21",
+    "sender": "Amma No: 1",
+    "message": "Can u ask when he is free",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Sure, I\u2019ve noted your request and will ask Harishan when he\u2019ll be free. He\u2019s currently engaged with work, and I\u2019ll let you know as soon as I hear back.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 15:40:32",
+    "sender": "Amma No: 1",
+    "message": "https://youtube.com/shorts/pQY1KRNUSZQ?si=x8-acXp4nxoDPrra",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Thanks for sharing the link; I\u2019ve forwarded it to Harishan. I\u2019ll let him know you sent it, and he\u2019ll get back to you when he\u2019s available.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:04:10",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:05:15",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:05:39",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:07:20",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:08:03",
+    "sender": "Amma No: 1",
+    "message": "Hello",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:10:20",
+    "sender": "Amma No: 1",
+    "message": "Hai",
+    "reply": "for WhatsApp",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:25:36",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Got it, Big\u202fMama\u2014I\u2019ve received the Instagram link and have forwarded it to Harishan. I\u2019ll let him know you shared it as soon as he\u2019s free. Thanks for reaching out!",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:26:22",
+    "sender": "Amma No: 1",
+    "message": "Hi",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi! Thanks for reaching out. Harishan is currently busy, but I\u2019ve noted your message and will let him know.",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:27:10",
+    "sender": "Amma No: 1",
+    "message": "Augent",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Thanks for your note. I\u2019ve forwarded \u201cAugent\u201d to Harishan and will let him know you sent it. Could you please clarify what you\u2019d like to discuss or need help with?",
+    "is_urgent": false,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 19:28:06",
+    "sender": "Amma No: 1",
+    "message": "Urgent",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. I\u2019ve marked this as HIGH PRIORITY and forwarded your urgent note to Harishan right away. He\u2019s currently engaged in work, but I\u2019ve recorded your message and will make sure he sees it as soon as possible. If there\u2019s any specific detail you can share, please let me know.",
+    "is_urgent": true,
+    "read": true
+  },
+  {
+    "timestamp": "2026-09-19 20:13:19",
+    "sender": "Big Mama",
+    "message": "https://www.instagram.com/p/DcjrtWMgSKh/?stkn=ZWo0YnAyZHg3aXoz",
+    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi Big Mama, Harishan is currently occupied with high-priority work. I have forwarded your message to him and alerted him!",
+    "is_urgent": false,
+    "read": true
   }
 ]

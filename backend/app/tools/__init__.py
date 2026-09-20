@@ -93,6 +93,30 @@ from app.tools.memory.memory_tool import (
     RecallUserFactsTool
 )
 
+# Device Monitoring & Control tools
+from app.tools.device import (
+    GetCurrentScreenTool,
+    GetActiveWindowTool,
+    GetOpenWindowsTool,
+    GetUITreeTool,
+    FindUIElementTool,
+    ClickUIElementTool,
+    ClickCoordinatesTool,
+    TypeTextTool,
+    PressKeyTool,
+    PressHotkeyTool,
+    DragAndDropTool,
+    CopySelectionTool,
+    PasteTool,
+    SwitchApplicationTool,
+    CloseApplicationTool,
+    AnalyzeScreenTool,
+    SelectFileOnScreenTool,
+    DragFileToAppTool,
+    GetDeviceStatusTool,
+    ToggleDeviceMonitoringTool
+)
+
 
 def register_all_tools():
     """Initializes and registers all tools with the global ToolRouter."""
@@ -167,6 +191,28 @@ def register_all_tools():
         # Memory
         SaveUserFactTool(),
         RecallUserFactsTool(),
+
+        # Device Monitoring & Control System
+        GetCurrentScreenTool(),
+        GetActiveWindowTool(),
+        GetOpenWindowsTool(),
+        GetUITreeTool(),
+        FindUIElementTool(),
+        ClickUIElementTool(),
+        ClickCoordinatesTool(),
+        TypeTextTool(),
+        PressKeyTool(),
+        PressHotkeyTool(),
+        DragAndDropTool(),
+        CopySelectionTool(),
+        PasteTool(),
+        SwitchApplicationTool(),
+        CloseApplicationTool(),
+        AnalyzeScreenTool(),
+        SelectFileOnScreenTool(),
+        DragFileToAppTool(),
+        GetDeviceStatusTool(),
+        ToggleDeviceMonitoringTool(),
     ]
 
     for t in tools:

@@ -1,0 +1,14 @@
+{
+  "name": "Harishan",
+  "agent_name": "Friday",
+  "wake_word": "friday",
+  "age": "",
+  "email": "",
+  "city": "",
+  "voice_gender": "female",
+  "languages": [
+    "tamil",
+    "english",
+    "tanglish"
+  ]
+}

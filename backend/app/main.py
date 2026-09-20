@@ -357,6 +357,17 @@ async def execute_in_backend(raw_query: str) -> str:
 
     print(f"\n[INCOMING QUERY] >>> '{query}'", flush=True)
 
+    # 1.5. Real-Time Alarm, Countdown Timer & Reminder Service (Sound + Notification + Speech)
+    from app.services.alarm_service import parse_alarm_or_reminder_query
+    alarm_parsed = parse_alarm_or_reminder_query(query)
+    if alarm_parsed:
+        return alarm_parsed.get("message", "Alarm configured.")
+
+    # 1.6. Live Screen Understanding & Desktop Context ("What am I seeing?")
+    from app.services.vision_service import is_screen_query, capture_and_describe_screen
+    if is_screen_query(query):
+        return capture_and_describe_screen()
+
     # 2. Voice Document Analysis Trigger
     if any(k in clean for k in ["analyze this file", "analyze file", "inspect this file", "examine this file", "read this file"]):
         try:

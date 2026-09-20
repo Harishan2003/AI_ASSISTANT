@@ -1,75 +1,225 @@
-# Byte-compiled / optimized / DLL files
+# ==============================================================================
+# FRIDAY AI Assistant - Git Ignore Configuration
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Operating System & System Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ------------------------------------------------------------------------------
+# 2. Python & Virtual Environments
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# OS files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
+*.pyd
+*.pyo
 
 # Virtual Environments
 .venv/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 backend/.venv/
-backend/env/
 backend/venv/
+backend/env/
 
-# Environment secrets
-.env
-.env.local
-.env.*.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Packaging & Distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Node.js / React Frontend
+# Testing & Type Checking / Linting
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# ------------------------------------------------------------------------------
+# 3. Node.js & React / Vite Frontend
+# ------------------------------------------------------------------------------
 node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+
+# Logs & Package manager caches
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-frontend/node_modules/
-frontend/dist/
-frontend/build/
+.npm/
+.eslintcache
+.stylelintcache
 .oxlintrc.json
+*.tsbuildinfo
 
-# IDEs and Editors
-.vscode/
+# ------------------------------------------------------------------------------
+# 4. Environment Variables, API Keys & Secrets
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.template
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Certificates and Keys
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# ------------------------------------------------------------------------------
+# 5. IDEs, Editors & AI Agent Caches
+# ------------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.swp
+*.swo
+*~
+.agents/
+.gemini/
 
-# SQLite / Database / Cache
+# ------------------------------------------------------------------------------
+# 6. Temporary & Scratch Files
+# ------------------------------------------------------------------------------
+scratch/
+*.tmp
+*.temp
+*.bak
+
+# ------------------------------------------------------------------------------
+# 7. Logs & Diagnostics
+# ------------------------------------------------------------------------------
+*.log
+logs/*
+!logs/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
+@AutomationLog.txt
+*Log.txt
+
+# ------------------------------------------------------------------------------
+# 8. Databases, Backups & Conversation History
+# ------------------------------------------------------------------------------
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
 *.sqlite3
-database/postgres/data/
-memory/chroma/data/
+*.sqlite3-journal
 
-# Model Files & Large Binaries (usually stored outside Git)
+# Database runtime data & backups
+database/*.db
+database/postgres/data/
+database/backups/*
+!database/backups/.gitkeep
+backend/database/conversations/conv_*.json
+backend/database/conversations/pe*.json
+backend/database/whatsapp_logs.json
+
+# ------------------------------------------------------------------------------
+# 9. Memory, Vector Stores & Uploads
+# ------------------------------------------------------------------------------
+memory/chroma/data/
+memory/cache/uploads/*
+!memory/cache/uploads/.gitkeep
+uploads/audio/*
+!uploads/audio/.gitkeep
+uploads/documents/*
+!uploads/documents/.gitkeep
+uploads/images/*
+!uploads/images/.gitkeep
+uploads/videos/*
+!uploads/videos/.gitkeep
+
+# ------------------------------------------------------------------------------
+# 10. AI / ML Models & Heavy Binaries
+# ------------------------------------------------------------------------------
 *.onnx
 *.onnx.json
-*.tar.bz2
-*.tar.gz
-*.zip
 *.bin
 *.model
+*.pt
+*.pth
+*.safetensors
+*.gguf
+*.tflite
+*.tar.gz
+*.tar.bz2
+*.zip
+*.7z
+*.rar
+
+# Model subfolder artifacts
+models/local_llm/*
+models/whisper/*
+models/piper/*
+models/vision/*
+models/embeddings/*
 backend/models/piper/**/*.onnx
 backend/models/piper/**/*.json
 backend/models/sherpa/**/*.onnx
 backend/models/sherpa/**/*.txt
 
-# Audio Output/Generated/Temp files
+# ------------------------------------------------------------------------------
+# 11. Audio / Media Output & Test Dumps
+# ------------------------------------------------------------------------------
 *.wav
 *.mp3
-backend/app/tamil_direct.wav
-backend/app/tamil_test.wav
+*.ogg
+*.flac
+*.m4a
+*.webm
+*.mp4
+
+# Retain essential frontend static assets if any
+!frontend/src/assets/**
+!frontend/public/**

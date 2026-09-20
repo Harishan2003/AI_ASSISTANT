@@ -96,7 +96,12 @@ class PermissionManager:
             if action in ("stop", "restart", "disable"):
                 return PermissionLevel.CONFIRM, f"Changing Windows service state requires confirmation."
 
+        # 6. Device Control & External File Sending Actions
+        if tool_name in ("drag_file_to_app", "send_file", "close_application"):
+            return PermissionLevel.CONFIRM, f"Desktop action '{tool_name}' requires human confirmation before proceeding."
+
         return declared_level, None
+
 
     def create_confirmation_request(
         self,

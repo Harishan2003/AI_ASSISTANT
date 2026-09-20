@@ -13,6 +13,7 @@ import asyncio
 import logging
 import threading
 import subprocess
+import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import psutil
@@ -40,6 +41,7 @@ except ImportError:
 # Try importing pyautogui
 try:
     import pyautogui
+    pyautogui.FAILSAFE = False
     _PYAUTOGUI_AVAILABLE = True
 except ImportError:
     _PYAUTOGUI_AVAILABLE = False
@@ -184,9 +186,110 @@ class WhatsAppService:
     def __init__(self):
         self._monitoring_active = False
         self._monitor_thread: Optional[threading.Thread] = None
+        self._monitor_start_time: Optional[datetime.datetime] = None
         self._replied_ids: set = set()
+        self._replied_signatures: set = self._load_replied_cache()
+        self._sender_history: Dict[str, List[Dict[str, Any]]] = {}
+        self.latest_urgent_alert: Optional[Dict[str, Any]] = None
         self.settings = self._load_settings()
         self.window = None
+
+    def _load_replied_cache(self) -> set:
+        """Loads historical replied message signatures from whatsapp_logs.json to prevent re-processing."""
+        cache = set()
+        try:
+            log_path = Path(__file__).resolve().parent.parent.parent / "database" / "whatsapp_logs.json"
+            if log_path.exists():
+                with open(log_path, "r", encoding="utf-8") as f:
+                    logs = json.load(f)
+                    if isinstance(logs, list):
+                        for entry in logs:
+                            s = (entry.get("sender") or "").strip().lower()
+                            m = (entry.get("message") or "").strip().lower()
+                            if s and m:
+                                cache.add(f"{s}:{m}")
+        except Exception as e:
+            logger.warning(f"Could not load historical replied cache: {e}")
+        return cache
+
+    def _play_urgent_voice_alert(self, sender: str, message: str):
+        """Speaks out loud on system speakers to immediately interrupt and alert Harishan."""
+        def _speak():
+            try:
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                # Format clean short alert
+                clean_msg = message[:100].replace("\n", " ").strip()
+                speaker.Speak(f"Attention Harishan! Urgent WhatsApp message from {sender}. {clean_msg}")
+            except Exception as e:
+                logger.warning(f"Voice alert SAPI fallback: {e}")
+
+        threading.Thread(target=_speak, daemon=True).start()
+
+    def get_urgent_alert(self) -> Optional[Dict[str, Any]]:
+        """Returns the latest unacknowledged urgent WhatsApp alert."""
+        return self.latest_urgent_alert
+
+    def dismiss_urgent_alert(self) -> Dict[str, Any]:
+        """Dismisses the active urgent alert."""
+        self.latest_urgent_alert = None
+        return {"status": "success", "message": "Urgent alert dismissed"}
+
+    def record_sender_message(self, sender: str, message: str, role: str = "contact"):
+        """Maintains the recent conversation turn history per sender."""
+        if sender not in self._sender_history:
+            self._sender_history[sender] = []
+        self._sender_history[sender].append({
+            "role": role,
+            "text": message,
+            "timestamp": time.strftime("%H:%M:%S")
+        })
+        # Keep last 6 turns per sender
+        self._sender_history[sender] = self._sender_history[sender][-6:]
+
+    def get_sender_context(self, sender: str) -> str:
+        """Returns formatted recent message history for the sender."""
+        history = self._sender_history.get(sender, [])
+        if not history:
+            return ""
+        lines = []
+        for turn in history[-4:]:
+            r_name = sender if turn.get("role") == "contact" else "Friday"
+            lines.append(f"- [{turn.get('timestamp')}] {r_name}: \"{turn.get('text')}\"")
+        return "\n".join(lines)
+
+    def is_media_message(self, text: str) -> tuple:
+        """Detects if message is a media, attachment, photo, document, or audio notification."""
+        if not text:
+            return False, ""
+        t_clean = text.lower().strip()
+        media_indicators = {
+            "photo": "photo",
+            "📷 photo": "photo",
+            "image": "photo",
+            "picture": "photo",
+            "video": "video",
+            "🎥 video": "video",
+            "voice message": "voice message",
+            "🎤 voice message": "voice message",
+            "audio": "audio",
+            "document": "document",
+            "📄 document": "document",
+            "file": "document",
+            "sticker": "sticker",
+            "gif": "GIF",
+            "location": "location",
+            "contact card": "contact card"
+        }
+        for k, v in media_indicators.items():
+            if t_clean == k or t_clean.startswith(f"📷 {k}") or t_clean == f"[{k}]":
+                return True, v
+
+        import re
+        if re.search(r'\.(pdf|docx?|xlsx?|pptx?|zip|rar|png|jpe?g|mp4|mp3|m4a)$', t_clean):
+            return True, "document"
+
+        return False, ""
 
     def _load_settings(self) -> Dict[str, Any]:
         if WHATSAPP_CONFIG_FILE.exists():
@@ -479,7 +582,7 @@ class WhatsAppService:
             }
         except Exception as e:
             logger.error(f"WhatsApp send_message failed: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "contact": contact_name, "error": str(e)}
 
     # -------------------------------------------------------------
     # VOICE & VIDEO CALLS
@@ -723,54 +826,71 @@ class WhatsAppService:
     # -------------------------------------------------------------
     # DYNAMIC AI AUTO-REPLY GENERATION (COMPULSORY AGENT HEADER)
     # -------------------------------------------------------------
-    def generate_auto_reply(self, sender: str, incoming_message: str) -> str:
+    # -------------------------------------------------------------
+    # DYNAMIC AI AUTO-REPLY GENERATION (COMPULSORY AGENT HEADER)
+    # -------------------------------------------------------------
+    def generate_auto_reply(self, sender: str, incoming_message: str, context: Optional[str] = None) -> str:
         """
         Generates a smart, polite, multilingual AI chat agent reply on Harishan's behalf.
-        - Converses intelligently like an AI chat / customer service agent based on the sender's message.
-        - Tells the sender about Friday when asked.
-        - Supports English, Tanglish (e.g. 'Enna panra Friday?'), and Tamil (e.g. 'ஹரிஷன் எங்கே?').
-        - Flags urgency immediately if critical.
+        - Converses intelligently based on the sender's full message and recent chat history.
+        - Supports multiple rapid messages in one combined reply.
+        - Handles media/photos/files as personal assistant without asking for prompts.
+        - Supports English, Tanglish, and Tamil.
+        - Flags urgency immediately.
         - Compulsorily includes Friday's identity as Harishan's personal AI Assistant.
         """
         lang = self.detect_language(incoming_message)
         is_urgent = self.check_is_urgent(incoming_message)
+        is_media, media_type = self.is_media_message(incoming_message)
 
         # 1. If user set a custom auto-reply message template in settings
         custom_reply = self.settings.get("custom_auto_reply_message")
         if custom_reply and custom_reply.strip():
             clean_msg = custom_reply.strip()
-            if "friday" in clean_msg.lower() and "assistant" in clean_msg.lower():
-                return clean_msg
-            return f"Hello! I am Friday, Harishan's personal AI Assistant. {clean_msg}"
+            return clean_msg
 
         # 2. Dynamic AI Chat Agent with Groq LLM
         from app.services.llm_service import llm_service
 
+        is_first_interaction = not bool(context and context.strip())
+
         system_instruction = (
-            "You are Friday, Harishan's intelligent personal AI Assistant and customer service chat agent on WhatsApp.\n"
-            "You are conversing with '{sender}' on Harishan's behalf while he is occupied with work.\n\n"
-            "MANDATORY IDENTITY REQUIREMENT:\n"
-            "Every single response MUST clearly include your introduction as Harishan's AI Assistant:\n"
-            "- In English: 'Hello! I am Friday, Harishan's personal AI Assistant.'\n"
-            "- In Tanglish: 'Hello! Naan Friday, Harishan-oda AI Assistant.'\n"
-            "- In Tamil: 'வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர்.'\n\n"
-            "LANGUAGE RULES:\n"
+            "You are Friday, the personal AI Assistant and smart mediator for Harishan.\n"
+            "You are conversing on WhatsApp with '{sender}' on Harishan's behalf while he is occupied.\n"
+            "Harishan is your primary user and boss. You act as the bridge/mediator between Harishan and '{sender}'.\n\n"
+            "IDENTITY & ROLE INSTRUCTIONS:\n"
+            + (
+                "- INITIAL CONTACT: Introduce yourself politely as Harishan's AI Assistant/Mediator "
+                "(e.g., in English: 'Hello! I am Friday, Harishan's personal AI Assistant.', "
+                "Tanglish: 'Hello! Naan Friday, Harishan-oda AI Assistant.', "
+                "Tamil: 'வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர்.').\n"
+                if is_first_interaction else
+                "- ONGOING CONVERSATION: Do NOT repeat your full introduction or greeting prefix! "
+                "Converse naturally as a mediator taking messages, answering queries, or assisting on Harishan's behalf.\n"
+            ) +
+            "\nLANGUAGE RULES:\n"
             "- If the incoming message is in Tamil (தமிழ்), reply entirely in Tamil script.\n"
-            "- If the incoming message is in Tanglish (Tamil written in English alphabet, like 'enna panra', 'eppo varuvaaru', 'epdi iruka'), reply entirely in natural, fluent Tanglish.\n"
+            "- If the incoming message is in Tanglish (Tamil written in English alphabet), reply entirely in natural Tanglish.\n"
             "- If the incoming message is in English (or other), reply in clear, professional English.\n\n"
-            "AGENT BEHAVIOR & CONVERSATION RULES:\n"
-            "1. If the sender asks about Friday (e.g., 'tell me more about you', 'what can you do', 'who are you', 'who made you'): Explain Friday's role as Harishan's intelligent personal AI assistant who manages tasks, WhatsApp, schedule, and desktop automation on Windows.\n"
-            "2. If the sender asks about Harishan or asks him to call/message back: State that Harishan is currently engaged in high-priority work, and you have recorded their message and notified him.\n"
-            "3. If the message indicates URGENCY / EMERGENCY (e.g., 'urgent', 'emergency', 'accident', 'call immediately'): Acknowledge the urgency immediately and confirm that you have marked it as HIGH PRIORITY and alerted Harishan right away.\n"
-            "4. Conversational Style: Be polite, warm, concise, and helpful (like a top-tier AI customer service assistant). Limit response to 2 to 3 well-formed complete sentences. Never leave sentences unfinished."
+            "MEDIATOR BEHAVIOR RULES:\n"
+            "1. Multi-Message Context: Address all thoughts/questions in the sender's message thoughtfully.\n"
+            "2. Attached Media/Files: Acknowledge receipt of images/documents/audio and confirm you forwarded them to Harishan. Never ask for vision prompts.\n"
+            "3. Availability/Calls: State that Harishan is currently engaged in work, and you have recorded their message to notify him.\n"
+            "4. Emergency/Urgency: If urgent, reassure the sender that you have immediately flagged it as HIGH PRIORITY for Harishan.\n"
+            "5. Tone: Polite, warm, concise, professional mediator. Limit reply to 2-3 complete sentences."
         )
+
+        context_info = f"\nRecent Chat History from {sender}:\n{context}\n" if context else ""
+        media_info = f"\nAttachment Detected: Sender sent a {media_type}.\n" if is_media else ""
 
         prompt = (
             f"Sender Name: {sender}\n"
+            f"{context_info}"
+            f"{media_info}"
             f"Incoming Message: \"{incoming_message}\"\n"
             f"Detected Language: {lang}\n"
             f"Urgency Status: {'URGENT' if is_urgent else 'Normal'}\n"
-            f"Generate Friday's WhatsApp reply:"
+            f"Generate Friday's mediator response:"
         )
 
         try:
@@ -822,6 +942,13 @@ class WhatsAppService:
                 return f"Hello! Naan Friday, Harishan-oda AI Assistant. Hi {sender}, idhu urgent message nu therinjidhu, udane Harishan kitta inform pannitten!"
             else:
                 return f"Hello! I am Friday, Harishan's personal AI Assistant. Hi {sender}, I have recognized your message as URGENT and immediately alerted Harishan!"
+        elif is_media:
+            if lang == "tamil":
+                return f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {sender}, நீங்கள் அனுப்பிய கோப்பைப் பெற்றுக்கொண்டேன். ஹரிஷன் ஓய்வு பெற்றதும் அதைப் பார்வையிடுவார்."
+            elif lang == "tanglish":
+                return f"Hello! Naan Friday, Harishan-oda AI Assistant. Hi {sender}, neenga anuppuna file-a safe-a receive pannitten. Harishan free aana udane check pannuvaaru!"
+            else:
+                return f"Hello! I am Friday, Harishan's personal AI Assistant. Hi {sender}, I have received the attachment you sent and forwarded it to Harishan for review."
         else:
             if lang == "tamil":
                 return f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {sender}, உங்கள் செய்தியைப் பெற்றுக்கொண்டேன். ஹரிஷன் தற்போது முக்கிய பணியில் உள்ளார், விரைவில் உங்களைத் தொடர்புகொள்வார்."
@@ -887,7 +1014,7 @@ class WhatsAppService:
         return False
 
     async def _fetch_toast_notifications(self) -> List[Dict[str, Any]]:
-        """Reads active Windows WhatsApp notifications."""
+        """Reads active Windows WhatsApp notifications, clearing stale backlog toasts."""
         if not _WINSDK_AVAILABLE:
             return []
 
@@ -907,11 +1034,23 @@ class WhatsAppService:
                 return []
 
             results = []
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            min_allowed_time = self._monitor_start_time if self._monitor_start_time else (now_utc - datetime.timedelta(seconds=45))
+
             for n in notifs:
                 try:
                     app_name = (n.app_info.display_info.display_name or "").lower()
                     app_id = (n.app_info.id or "").lower()
                     if "whatsapp" in app_name or "whatsapp" in app_id:
+                        # Check timestamp freshness: ignore notifications created before monitoring began
+                        c_time = getattr(n, "creation_time", None)
+                        if c_time and hasattr(c_time, "tzinfo") and c_time < (min_allowed_time - datetime.timedelta(seconds=15)):
+                            try:
+                                listener.remove_notification(n.id)
+                            except Exception:
+                                pass
+                            continue
+
                         bindings = n.notification.visual.bindings
                         texts = []
                         for b in bindings:
@@ -927,7 +1066,8 @@ class WhatsAppService:
                                 "id": n.id,
                                 "sender": sender,
                                 "message": msg,
-                                "is_group": is_group
+                                "is_group": is_group,
+                                "creation_time": c_time
                             })
                 except Exception:
                     continue
@@ -937,7 +1077,7 @@ class WhatsAppService:
             return []
 
     def _monitor_loop(self):
-        """Background thread polling incoming notifications."""
+        """Background thread polling incoming notifications with deduplication and auto-reply."""
         logger.info("[WhatsApp Monitor] Background thread started.")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -947,12 +1087,30 @@ class WhatsAppService:
                 notifications = loop.run_until_complete(self._fetch_toast_notifications())
                 for notif in notifications:
                     notif_id = notif.get("id")
-                    sender = notif.get("sender", "Unknown")
-                    msg_text = notif.get("message", "")
+                    sender = notif.get("sender", "Unknown").strip()
+                    msg_text = notif.get("message", "").strip()
                     is_group = notif.get("is_group", False)
 
-                    if notif_id and notif_id not in self._replied_ids:
+                    msg_sig = f"{sender.lower()}:{msg_text.lower()}"
+
+                    if notif_id:
+                        if notif_id in self._replied_ids or msg_sig in self._replied_signatures:
+                            if _WINSDK_AVAILABLE:
+                                try:
+                                    UserNotificationListener.current.remove_notification(notif_id)
+                                except Exception:
+                                    pass
+                            continue
+
                         self._replied_ids.add(notif_id)
+                        self._replied_signatures.add(msg_sig)
+
+                        # Dismiss the notification from Windows Action Center immediately
+                        if _WINSDK_AVAILABLE:
+                            try:
+                                UserNotificationListener.current.remove_notification(notif_id)
+                            except Exception:
+                                pass
 
                         # STRICT REQUIREMENT 1: Never auto-reply to group chats
                         if is_group:
@@ -966,11 +1124,26 @@ class WhatsAppService:
 
                         logger.info(f"[WhatsApp Monitor] New direct message from saved contact {sender}: {msg_text}")
 
+                        # Check urgency and record for immediate user interruption
                         is_urgent = self.check_is_urgent(msg_text)
+                        if is_urgent:
+                            self.latest_urgent_alert = {
+                                "id": notif_id,
+                                "sender": sender,
+                                "message": msg_text,
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                            }
+                            # Speak immediately to Harishan out loud
+                            self._play_urgent_voice_alert(sender, msg_text)
+
+                        # Record incoming message in sender conversation history
+                        self.record_sender_message(sender, msg_text, role="contact")
+                        sender_context = self.get_sender_context(sender)
 
                         # If Auto-Reply is enabled for direct saved contacts
-                        if self.settings.get("auto_reply", True):
-                            reply = self.generate_auto_reply(sender, msg_text)
+                        if self.settings.get("auto_reply", True) and msg_text:
+                            reply = self.generate_auto_reply(sender, msg_text, context=sender_context)
+                            self.record_sender_message(sender, reply, role="assistant")
                             self.send_message(sender, reply)
                             self._log_message_event(sender, msg_text, reply, is_urgent=is_urgent)
 
@@ -998,17 +1171,20 @@ class WhatsAppService:
         loop.close()
         logger.info("[WhatsApp Monitor] Background thread terminated.")
 
-    def set_monitoring(self, enabled: bool, auto_reply: Optional[bool] = None, custom_auto_reply_message: Optional[str] = None) -> Dict[str, Any]:
-        """Toggles background WhatsApp monitoring on or off."""
-        self.settings["enabled"] = enabled
+    def set_monitoring(self, enabled: Optional[bool] = None, auto_reply: Optional[bool] = None, custom_auto_reply_message: Optional[str] = None) -> Dict[str, Any]:
+        """Toggles background WhatsApp monitoring on or off and configures auto-reply parameters."""
+        if enabled is not None:
+            self.settings["enabled"] = enabled
         if auto_reply is not None:
             self.settings["auto_reply"] = auto_reply
         if custom_auto_reply_message is not None:
             self.settings["custom_auto_reply_message"] = custom_auto_reply_message
 
-        if enabled:
+        current_enabled = self.settings.get("enabled", False)
+        if current_enabled:
             if not self._monitoring_active:
                 self._monitoring_active = True
+                self._monitor_start_time = datetime.datetime.now(datetime.timezone.utc)
                 self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
                 self._monitor_thread.start()
         else:

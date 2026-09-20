@@ -1,9 +1,9 @@
 {
   "enabled": false,
-  "auto_reply": true,
+  "auto_reply": false,
   "monitoring_active": false,
   "custom_auto_reply_message": "",
   "auto_reply_template": "dynamic_ai",
-  "replied_count": 28,
-  "last_activity": "2026-09-17 09:22:20"
+  "replied_count": 51,
+  "last_activity": "2026-09-19 20:13:19"
 }

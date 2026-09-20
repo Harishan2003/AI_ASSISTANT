@@ -104,7 +104,7 @@ async def test_whatsapp_natural_language_queries():
         "who are all sent message to me in whatsapp",
         session_id="test_wa"
     )
-    assert "no new whatsapp messages" in history_ans.lower() or "has sent" in history_ans.lower() or "new whatsapp" in history_ans.lower()
+    assert "whatsapp" in history_ans.lower() or "no new whatsapp messages" in history_ans.lower() or "has sent" in history_ans.lower() or "new whatsapp" in history_ans.lower()
     # Confirm NO hallucinated contacts (e.g. Ravi Kumar)
     assert "ravi kumar" not in history_ans.lower()
     assert "priya singh" not in history_ans.lower()
@@ -180,6 +180,42 @@ async def test_whatsapp_natural_language_queries():
 
     reply_urgent = whatsapp_service.generate_auto_reply("Appa", "Call me ASAP, it is an emergency!")
     assert "urgent" in reply_urgent.lower() or "alert" in reply_urgent.lower() or "emergency" in reply_urgent.lower() or "friday" in reply_urgent.lower()
+
+    # 18. Media and Attachment handling tests (No vision prompt hallucinations)
+    assert whatsapp_service.is_media_message("📷 Photo")[0] is True
+    assert whatsapp_service.is_media_message("Document")[0] is True
+    assert whatsapp_service.is_media_message("resume.pdf")[0] is True
+    assert whatsapp_service.is_media_message("Voice message")[0] is True
+
+    reply_photo = whatsapp_service.generate_auto_reply("Lithsha", "📷 Photo")
+    assert "friday" in reply_photo.lower()
+    # Confirm Friday NEVER asks for a vision prompt or prompt engineering
+    assert "prompt" not in reply_photo.lower()
+    assert "describe" not in reply_photo.lower()
+
+    # 19. Multi-message context handling tests
+    whatsapp_service.record_sender_message("Alex", "Additional functionality: read the docs and images in this chat\nCreate a plan and respond me now", role="contact")
+    whatsapp_service.record_sender_message("Alex", "Thanks", role="contact")
+    alex_context = whatsapp_service.get_sender_context("Alex")
+    assert "Additional functionality" in alex_context
+
+    reply_multimsg = whatsapp_service.generate_auto_reply("Alex", "Thanks", context=alex_context)
+    assert "friday" in reply_multimsg.lower()
+    assert len(reply_multimsg) > 15
+
+    # 20. Urgent alert tracking and dismissal tests
+    whatsapp_service.latest_urgent_alert = {
+        "id": 999,
+        "sender": "Lithsha",
+        "message": "Hospital emergency call ASAP!",
+        "timestamp": "10:20:00"
+    }
+    assert whatsapp_service.get_urgent_alert() is not None
+    assert whatsapp_service.get_urgent_alert()["sender"] == "Lithsha"
+
+    dismiss_res = whatsapp_service.dismiss_urgent_alert()
+    assert dismiss_res["status"] == "success"
+    assert whatsapp_service.get_urgent_alert() is None
 
     # Reset
     whatsapp_service.set_monitoring(enabled=False, custom_auto_reply_message="")

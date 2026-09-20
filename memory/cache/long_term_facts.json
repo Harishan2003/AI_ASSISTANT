@@ -27,6 +27,20 @@
         "domain": "fact",
         "created_at": 1789549445.0197248
       }
+    },
+    {
+      "fact_id": "fact_f9395b66",
+      "fact": "me in 2 mins i need to cook",
+      "category": "number",
+      "user_id": "Harishan",
+      "created_at": 1789814513.4833648,
+      "metadata": {
+        "fact_id": "fact_f9395b66",
+        "category": "number",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1789814513.4833648
+      }
     }
   ]
 }
