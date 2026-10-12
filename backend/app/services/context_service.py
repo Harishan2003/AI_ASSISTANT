@@ -146,27 +146,159 @@ def set_file_to_clipboard(file_path: str) -> bool:
         return False
 
 
-def get_current_explorer_selection() -> Optional[str]:
-    """Reads the actively highlighted file/folder directly from open File Explorer windows."""
+def get_hovered_or_selected_file_or_folder(must_be_file: bool = False) -> Optional[str]:
+    """
+    Dynamically locates the file or folder currently hovered by mouse cursor or selected in Explorer/Desktop.
+    Freshly evaluated on every invocation to prevent stale file re-use.
+    """
+    # 1. Check mouse hover element via UIAutomation
+    try:
+        import uiautomation as auto
+        ctrl = auto.ControlFromCursor()
+        if ctrl:
+            curr = ctrl
+            for _ in range(5):
+                if not curr:
+                    break
+                name = (curr.Name or "").strip()
+                if name and os.path.exists(name):
+                    if not must_be_file or os.path.isfile(name):
+                        context_state.set_selected_file(name)
+                        return name
+                c_type = (curr.ControlTypeName or "").lower()
+                if any(k in c_type for k in ["listitem", "treeitem", "text", "custom", "pane", "button"]):
+                    # Check if the control is inside File Explorer or on the Desktop
+                    is_explorer_or_desktop = False
+                    top_class = ""
+                    try:
+                        top_ctrl = curr.GetTopLevelControl()
+                        if top_ctrl:
+                            top_hwnd = top_ctrl.NativeWindowHandle
+                            class_buff = ctypes.create_unicode_buffer(256)
+                            user32.GetClassNameW(top_hwnd, class_buff, 256)
+                            top_class = class_buff.value
+                            if top_class in ["CabinetWClass", "ExploreWClass", "Progman", "WorkerW"]:
+                                is_explorer_or_desktop = True
+                    except Exception:
+                        pass
+
+                    if is_explorer_or_desktop:
+                        # 1. First check active File Explorer directory if in Explorer window
+                        if top_class in ["CabinetWClass", "ExploreWClass"]:
+                            active_explorer_dir = FileExplorerContextHandler.get_active_explorer_path()
+                            if active_explorer_dir and os.path.exists(active_explorer_dir):
+                                p_exp = Path(active_explorer_dir)
+                                cand = p_exp / name
+                                if cand.exists() and (not must_be_file or cand.is_file()):
+                                    context_state.set_selected_file(str(cand.resolve()))
+                                    return str(cand.resolve())
+                                for match in p_exp.glob(f"{name}.*"):
+                                    if match.is_file():
+                                        context_state.set_selected_file(str(match.resolve()))
+                                        return str(match.resolve())
+
+                        # 2. Check Desktop if in Desktop window
+                        if top_class in ["Progman", "WorkerW"]:
+                            desktop_p = Path.home() / "Desktop"
+                            cand = desktop_p / name
+                            if cand.exists() and (not must_be_file or cand.is_file()):
+                                context_state.set_selected_file(str(cand.resolve()))
+                                return str(cand.resolve())
+                            for match in desktop_p.glob(f"{name}.*"):
+                                if match.is_file():
+                                    context_state.set_selected_file(str(match.resolve()))
+                                    return str(match.resolve())
+                curr = curr.GetParentControl()
+    except Exception:
+        pass
+
+    # 2. Check active File Explorer window selection
     try:
         import comtypes.client
         shell = comtypes.client.CreateObject("Shell.Application")
         windows = shell.Windows()
+        hwnd_fg = user32.GetForegroundWindow()
 
+        # Check foreground Explorer window first
         for i in range(windows.Count):
-            w = windows.Item(i)
-            if w and hasattr(w, "Document"):
-                selected_items = w.Document.SelectedItems()
-                if selected_items and selected_items.Count > 0:
-                    for j in range(selected_items.Count):
-                        item_path = selected_items.Item(j).Path
-                        if os.path.exists(item_path):
-                            context_state.set_selected_file(item_path)
-                            return item_path
-    except Exception as e:
-        print(f"[ContextService] Shell COM selection query failed: {e}")
+            try:
+                w = windows.Item(i)
+                if w and int(w.HWND) == int(hwnd_fg):
+                    doc = getattr(w, "Document", None)
+                    if doc and hasattr(doc, "SelectedItems"):
+                        sel = doc.SelectedItems()
+                        if sel and sel.Count > 0:
+                            for item_idx in range(sel.Count):
+                                p = sel.Item(item_idx).Path
+                                if p and os.path.exists(p):
+                                    if not must_be_file or os.path.isfile(p):
+                                        context_state.set_selected_file(p)
+                                        return str(p)
+                    # Try FocusedItem if selection was empty
+                    focused = getattr(doc, "FocusedItem", None)
+                    if focused:
+                        p = getattr(focused, "Path", None)
+                        if p and os.path.exists(p):
+                            if not must_be_file or os.path.isfile(p):
+                                context_state.set_selected_file(p)
+                                return str(p)
+            except Exception:
+                continue
 
-    return context_state.selected_file
+        # Check any open Explorer window with selection
+        for i in range(windows.Count):
+            try:
+                w = windows.Item(i)
+                doc = getattr(w, "Document", None)
+                if doc and hasattr(doc, "SelectedItems"):
+                    sel = doc.SelectedItems()
+                    if sel and sel.Count > 0:
+                        for item_idx in range(sel.Count):
+                            p = sel.Item(item_idx).Path
+                            if p and os.path.exists(p):
+                                if not must_be_file or os.path.isfile(p):
+                                    context_state.set_selected_file(p)
+                                    return str(p)
+                focused = getattr(doc, "FocusedItem", None)
+                if focused:
+                    p = getattr(focused, "Path", None)
+                    if p and os.path.exists(p):
+                        if not must_be_file or os.path.isfile(p):
+                            context_state.set_selected_file(p)
+                            return str(p)
+            except Exception:
+                continue
+
+        # 3. Check Windows Desktop surface selection
+        try:
+            desktop_view = shell.Windows().FindWindowSW(0, 0, 8, 0, 1)
+            if desktop_view and hasattr(desktop_view, "Document"):
+                sel = desktop_view.Document.SelectedItems()
+                if sel and sel.Count > 0:
+                    for item_idx in range(sel.Count):
+                        p = sel.Item(item_idx).Path
+                        if p and os.path.exists(p):
+                            if not must_be_file or os.path.isfile(p):
+                                context_state.set_selected_file(p)
+                                return str(p)
+                focused = getattr(desktop_view.Document, "FocusedItem", None)
+                if focused:
+                    p = getattr(focused, "Path", None)
+                    if p and os.path.exists(p):
+                        if not must_be_file or os.path.isfile(p):
+                            context_state.set_selected_file(p)
+                            return str(p)
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[ContextService] Selection query failed: {e}")
+
+    return None
+
+
+def get_current_explorer_selection(must_be_file: bool = False) -> Optional[str]:
+    """Reads fresh file/folder selection from mouse cursor or active Explorer/Desktop window."""
+    return get_hovered_or_selected_file_or_folder(must_be_file=must_be_file)
 
 
 def prepare_file_or_folder_for_sharing(target_path: str) -> str:
@@ -704,7 +836,7 @@ class FileExplorerContextHandler:
             paste_text(target_name)
             return f"Selected '{target_name}' in File Explorer."
 
-        # 3. OPEN ITEM (IN-PLACE NAVIGATION FOR ACTIVE TAB)
+        # 3. OPEN ITEM (IN-PLACE NAVIGATION FOR ACTIVE TAB / HOVERED FILE)
         open_match = re.search(r"^(?:open|launch|enter|go to)\s+(.+)$", cmd_lower)
         if open_match:
             raw_target = open_match.group(1).strip()
@@ -713,7 +845,15 @@ class FileExplorerContextHandler:
             found_path = None
             found_name = None
 
-            if active_path and os.path.exists(active_path):
+            # Check if user specifically referred to hovered / selected item
+            is_hover_or_pronoun = target_name in ["", "this", "this file", "this folder", "the file", "the folder", "item", "the item", "folder", "file"]
+            if is_hover_or_pronoun:
+                hovered = get_hovered_or_selected_file_or_folder()
+                if hovered and os.path.exists(hovered):
+                    found_path = hovered
+                    found_name = Path(hovered).name
+
+            if not found_path and active_path and os.path.exists(active_path):
                 try:
                     entries = list(os.scandir(active_path))
                     for entry in entries:
@@ -733,6 +873,15 @@ class FileExplorerContextHandler:
 
             if found_path:
                 context_state.set_selected_file(found_path)
+
+                # If existing screen / tab requested or if it is a directory in Explorer
+                if any(w in cmd_lower for w in ["existing screen", "existing tab", "current tab", "existing window"]):
+                    if os.path.isdir(found_path):
+                        if cls.navigate_existing_tab(found_path):
+                            return f"Opened {found_name} in existing screen."
+                    else:
+                        os.startfile(found_path)
+                        return f"Opened {found_name} in existing screen."
 
                 if os.path.isdir(found_path):
                     if cls.navigate_existing_tab(found_path):

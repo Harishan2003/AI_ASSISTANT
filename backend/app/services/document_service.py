@@ -36,13 +36,14 @@ class DocumentService:
     def encode_image_base64(self, file_path: Path) -> str:
         """Encodes image in high fidelity without destroying facial details."""
         try:
-            from PIL import Image
+            from PIL import Image, ImageOps
 
             with Image.open(file_path) as img:
-                if img.mode in ("RGBA", "P", "LA"):
+                img = ImageOps.exif_transpose(img)
+                if img.mode != "RGB":
                     img = img.convert("RGB")
 
-                max_dim = 1600
+                max_dim = 1400
                 if max(img.size) > max_dim:
                     img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
@@ -66,8 +67,9 @@ class DocumentService:
         clean = re.sub(r"-\s*analyze this file", "", clean).strip()
         clean = re.sub(r"analyze this file", "", clean).strip()
         clean = re.sub(r"analyze this image", "", clean).strip()
+        clean = re.sub(r"analyze this document", "", clean).strip()
 
-        if not clean or clean in ["describe this", "what is this", "inspect", "inspect this", "read this"]:
+        if not clean or clean in ["describe this", "what is this", "inspect", "inspect this", "read this", "analyze this", "analyze", "summarize this"]:
             return "describe"
 
         if any(w in clean for w in ["who is", "who's", "who", "identify person", "name of", "which actor", "celebrity", "person name"]):
@@ -79,43 +81,51 @@ class DocumentService:
         return "targeted"
 
     async def analyze_image_with_ollama(self, file_path: Path, prompt: str = "") -> str:
-        """High-precision vision engine configured for accurate facial grounding and concise outputs."""
+        """High-precision vision engine configured for accurate visual grounding and concise outputs."""
         b64_image = self.encode_image_base64(file_path)
         intent = self.classify_user_intent(prompt)
 
         system_msg = (
-            "You are Friday, an elite intelligence assistant with deep, rigorous expertise in global figures, "
-            "Indian national leaders, and regional cinema (Tamil/Kollywood, Telugu, Hindi/Bollywood, Hollywood).\n"
-            "Rules for identification:\n"
-            "1. Ground yourself strictly on unique facial bone structure, distinctive hairstyle, eyes, and jawline.\n"
-            "2. Do NOT confuse Indian leaders (e.g. Dr. A.P.J. Abdul Kalam's signature center-parted silver hair vs Manmohan Singh).\n"
-            "3. Do NOT confuse South Indian actors (e.g. Suriya, Thalapathy Vijay, Vikram) with Bollywood actors (e.g. Rajkummar Rao, Ajay Devgn).\n"
-            "4. Be accurate with factual details and filmographies. State your findings directly and concisely."
+            "You are Friday, an advanced computer vision and visual intelligence assistant.\n"
+            "CRITICAL VISUAL RECOGNITION INSTRUCTIONS:\n"
+            "1. Facial & Person Identification:\n"
+            "   - Carefully examine distinct facial features: bone structure, eyes, nose, hairstyle/hairline, facial hair, skin tone, and expression.\n"
+            "   - If the subject is a recognized public figure, celebrity, actor, cinema star, world leader, politician, scientist, athlete, or tech executive:\n"
+            "     * State their EXACT FULL NAME clearly in bold.\n"
+            "     * Briefly state their key profession, notable works, or historical significance.\n"
+            "   - If the individual is a private person, user, non-celebrity, or NOT definitively recognized as a world-famous public figure:\n"
+            "     * NEVER guess, fabricate, or hallucinate a celebrity name.\n"
+            "     * State clearly that this is an unidentified individual or private person, and describe their physical appearance, attire, and expression factually.\n"
+            "2. Text & OCR Transcription:\n"
+            "   - Transcribe all visible text, labels, formulas, and badges with high fidelity.\n"
+            "3. Output format:\n"
+            "   - Provide a clear, factual, direct, and structured response addressing the user's prompt without reasoning traces."
         )
 
         if intent == "identity":
             user_instruction = (
                 f"Question: '{prompt or 'Who is in this image?'}'\n"
-                "State the recognized person or character's name directly in line 1. "
-                "Provide 1-2 accurate sentences regarding their primary identity or role. "
-                "Do NOT provide unnecessary filler, lists, or tables."
+                "Examine facial features carefully. State the recognized person's verified exact name directly in line 1. "
+                "Provide 1-2 accurate factual sentences regarding their identity. If private/unknown, state that clearly."
             )
         elif intent == "describe":
             user_instruction = (
-                "Provide a complete, concise summary of this image in 2 to 3 sentences.\n"
-                "- If the image contains a recognizable public figure, statesman, or cinema personality "
-                "(e.g. Dr. A.P.J. Abdul Kalam, Emma Watson, Suriya), identify them directly by name.\n"
-                "- If the person is unknown, describe their appearance, clothing, and action.\n"
-                "- If it depicts an event, artwork, or movie scene, clearly describe what is happening.\n"
-                "Do not produce headings, lists, or tables."
+                "Provide a comprehensive, accurate analysis of this image.\n"
+                "- If a person is present: Accurately state their exact name if they are a recognized public figure, or describe them factually if private/unidentified.\n"
+                "- Clearly describe the primary subject, objects, environment, and visual composition.\n"
+                "- Transcribe any visible text, labels, equations, or code.\n"
+                "- State your findings clearly in clean Markdown without internal thinking blocks."
             )
         elif intent == "report":
             user_instruction = (
-                f"User request: '{prompt}'\n"
-                "Provide a structured analysis report covering: Subject Identification, Composition & Context, and Notable Visual Details."
+                f"Analyze the image in detail for the following request: '{prompt}'.\n"
+                "Provide a structured analysis covering:\n"
+                "1. **Overview & Key Subject**\n"
+                "2. **Detailed Visual Elements & Text/Data Transcription**\n"
+                "3. **Context & Key Insights**"
             )
         else:
-            user_instruction = f"Address this specific question directly based on the image: {prompt}"
+            user_instruction = f"Inspect the image and answer the user's question directly, factually, and accurately: {prompt}"
 
         # 1. Primary: Groq Vision (Using supported vision model IDs)
         groq_api_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
@@ -152,8 +162,8 @@ class DocumentService:
                                     ]
                                 }
                             ],
-                            temperature=0.05,
-                            max_tokens=800
+                            temperature=0.0,
+                            max_tokens=1024
                         )
                         res = completion.choices[0].message.content.strip()
 

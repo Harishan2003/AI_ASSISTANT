@@ -2,12 +2,12 @@ import pytest
 import asyncio
 from app.services.agent_feature_scanner import AgentFeatureScanner
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_scanner_initialization():
     scanner = AgentFeatureScanner()
     assert scanner is not None
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_scan_all_features_structure():
     scanner = AgentFeatureScanner()
     results = await scanner.scan_all_features()
@@ -24,7 +24,7 @@ async def test_scan_all_features_structure():
         assert "tested_at" in item
         assert item["status"] in ["working", "failed", "skipped", "unavailable", "permission_required", "not_configured"]
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_feature_isolation_on_failure():
     scanner = AgentFeatureScanner()
     
@@ -32,14 +32,15 @@ async def test_feature_isolation_on_failure():
     async def mock_faulty_test():
         raise RuntimeError("Simulated test crash")
 
-    scanner._test_calculator = mock_faulty_test
+    scanner._test_cpu_telemetry = mock_faulty_test
     results = await scanner.scan_all_features()
     
-    calc_result = next((r for r in results if r["feature"] == "Calculator"), None)
-    assert calc_result is not None
-    assert calc_result["status"] == "failed"
-    assert "Simulated test crash" in calc_result["error"]
+    cpu_result = next((r for r in results if "CPU" in r["feature"]), None)
+    assert cpu_result is not None
+    assert cpu_result["status"] == "failed"
+    assert "Simulated test crash" in cpu_result["error"]
     
     # Verify other tests still ran successfully
-    mic_result = next((r for r in results if r["feature"] == "Microphone"), None)
+    mic_result = next((r for r in results if "Microphone" in r["feature"]), None)
+    assert mic_result is not None
     assert mic_result["status"] == "working"

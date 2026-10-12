@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -50,10 +51,16 @@ class ConversationMemoryService:
 
     def _save_json(self, file_path: Path, data: Dict[str, Any]) -> None:
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
+            temp_path = file_path.with_suffix(".tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
+            temp_path.replace(file_path)
         except Exception as e:
-            logger.error(f"[ConversationMemory Error] Saving failed: {e}", exc_info=True)
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e2:
+                logger.error(f"[ConversationMemory Error] Saving failed: {e2}", exc_info=True)
 
     def cleanup_expired_conversations(self) -> int:
         now = time.time()
@@ -120,6 +127,21 @@ class ConversationMemoryService:
         self._save_json(file_path, data)
         return data
 
+    def _sanitize_message_content(self, content: str) -> str:
+        """Strips out massive base64 payloads and replaces with static server image URLs to keep JSON tiny and fast."""
+        if not content:
+            return ""
+        if "data:image/" in content and "base64," in content:
+            # Extract image filename if path is present in markdown tag
+            path_match = re.search(r'path=([^\]|]+)', content)
+            if path_match:
+                img_path = path_match.group(1).strip()
+                filename = Path(img_path).name
+                server_url = f"http://localhost:8000/api/v1/images/{filename}"
+                clean_content = re.sub(r'\(data:image\/[a-zA-Z]+;base64,[^\)]+\)', f'({server_url})', content)
+                return clean_content
+        return content
+
     async def add_message(
         self,
         conversation_id: str,
@@ -139,12 +161,20 @@ class ConversationMemoryService:
                 "messages": [],
             }
 
+        sanitized_content = self._sanitize_message_content(content)
+
+        # Skip duplicate adjacent message additions
+        if data["messages"]:
+            last_msg = data["messages"][-1]
+            if last_msg.get("role") == role and last_msg.get("content") == sanitized_content:
+                return last_msg
+
         now = time.time()
         msg_id = "msg_" + uuid.uuid4().hex[:10]
         new_msg = {
             "message_id": msg_id,
             "role": role,
-            "content": content,
+            "content": sanitized_content,
             "created_at": now,
         }
 
@@ -154,7 +184,7 @@ class ConversationMemoryService:
 
         # Auto-generate title from first user message
         if role == "user" and (data.get("title") == "New Chat" or not data.get("title")):
-            clean_title = content.strip().replace("\n", " ")
+            clean_title = sanitized_content.strip().replace("\n", " ")
             if len(clean_title) > 45:
                 clean_title = clean_title[:42] + "..."
             data["title"] = clean_title
@@ -162,11 +192,11 @@ class ConversationMemoryService:
         self._save_json(file_path, data)
 
         # Automatically index into Friday's semantic memory vector store
-        if index_vector and content.strip():
+        if index_vector and sanitized_content.strip():
             try:
                 friday_memory_manager.ingest_turn_sync(
-                    user_query=content if role == "user" else "",
-                    agent_response=content if role != "user" else "",
+                    user_query=sanitized_content if role == "user" else "",
+                    agent_response=sanitized_content if role != "user" else "",
                     session_id=conversation_id,
                     metadata={"role": role, "conversation_id": conversation_id, "message_id": msg_id},
                 )

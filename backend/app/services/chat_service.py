@@ -13,15 +13,17 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import re
-from duckduckgo_search import DDGS
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 from app.core.llm.models import ChatMessage, ChatRequest, ChatResponse, MessageRole, ModelConfig
 from app.core.llm.provider_factory import ProviderFactory
 from app.services.agent_router import agent_router
-from app.tools import tool_registry
+from app.services.web_search_context import gather_all_web_context
+from app.tools.tool_registry import tool_registry
 
 
 class ChatService:
@@ -33,7 +35,7 @@ class ChatService:
         if provider.value == "groq":
             config = ModelConfig(
                 provider=provider,
-                model_name="qwen/qwen3.6-27b",
+                model_name=settings.groq_model or "llama-3.3-70b-versatile",
                 api_url=settings.groq_url,
                 api_key=settings.groq_api_key,
                 timeout=settings.timeout,
@@ -206,28 +208,51 @@ class ChatService:
             provider=settings.llm_provider,
         )
 
-    def _fetch_web_search(self, query: str) -> str:
-        """Fetches live search results for real-time grounding."""
+    async def _fetch_web_search(self, query: str) -> str:
+        """Fetches live search and news results for real-time grounding."""
         try:
-            print(f"[ChatService] Fetching live web search for: {query}")
-            with DDGS() as ddgs:
-                results = [r.get("body", "") for r in ddgs.text(query, max_results=3)]
-                if results:
-                    return " | ".join(results)
+            print(f"[ChatService] Fetching live web/news intelligence for: {query}", flush=True)
+            res = await gather_all_web_context(query)
+            return res or ""
         except Exception as e:
-            print(f"[ChatService] Web search error: {e}")
-        return ""
+            print(f"[ChatService] Web context error: {e}", flush=True)
+            return ""
 
     def _ensure_system_prompt(self, messages: list[ChatMessage], live_context: str = "") -> list[ChatMessage]:
-        """Ensures Friday/Jarvis answers directly with up-to-date real world knowledge."""
+        """Ensures the assistant answers with up-to-date real world knowledge, personal warmth, and caring context."""
+        from datetime import datetime
+        current_date_str = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
+        
+        agent_name = "Friday"
+        user_name = "Harishan"
+        try:
+            from app.services.command_executor import load_user_profile
+            prof = load_user_profile()
+            agent_name = prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or prof.get("wake_word") or "Friday"
+            user_name = prof.get("profile", {}).get("name") or prof.get("name") or "Harishan"
+        except Exception:
+            pass
+
+        persona_context = ""
+        try:
+            from app.services.user_persona_service import user_persona_service
+            persona_context = user_persona_service.get_care_and_wellbeing_context()
+        except Exception:
+            pass
+
         system_content = (
-            "You are an intelligent, concise personal AI assistant with full real-time awareness of global current affairs, "
-            "geopolitics, wars, climate and weather events, food/water crises, and space science updates. "
-            "Answer inquiries directly, factually, and concisely without conversational fluff."
+            f"You are {agent_name}, {user_name}'s dedicated personal AI companion, trusted advisor, and intelligent partner. "
+            f"Current real-world date and time: {current_date_str}.\n\n"
+            + (f"{persona_context}\n\n" if persona_context else "")
+            + "CORE GUIDELINES:\n"
+            + "- You have full built-in AI image generation, photo editing, and computer vision capabilities powered by FLUX.1. Never claim you cannot render or output images.\n"
+            + "- You run directly on Harishan's Windows 10/11 PC with full Device Monitoring & Control enabled (screen reading, mouse cursor tracking, window management, file operations, app launching, volume/brightness control, and email client automation). NEVER state that you cannot control the screen, access files, inspect the cursor, or send emails.\n"
+            + "- NEVER output fake or fabricated markdown image URLs (such as ![...](http://localhost:8000/api/v1/images/...)). Image rendering is handled automatically by Friday's internal neural diffusion pipeline.\n"
+            + "- State verified facts clearly without robotic self-correction loops or internal reasoning traces."
         )
         
         if live_context:
-            system_content += f"\n\nLIVE REAL-TIME WEB SEARCH DATA FOR THIS QUERY:\n{live_context}\n(Use this live data to provide an accurate, up-to-date answer)."
+            system_content += f"\n\nLIVE REAL-TIME DATA / BREAKING NEWS FOR THIS QUERY:\n{live_context}\n(Synthesize the verified live headlines and information above into a direct, helpful answer)."
 
         has_system = any(m.role == MessageRole.SYSTEM for m in messages)
         if not has_system:
@@ -259,28 +284,66 @@ class ChatService:
         if tool_name:
             return await self._execute_tool(tool_name, user_message)
 
+        # Contextual search query resolution for follow-ups
+        search_query = user_message
+        if len(request.messages) > 1:
+            prev_user_msgs = [m.content for m in request.messages[:-1] if m.role == MessageRole.USER]
+            if prev_user_msgs:
+                last_user_topic = prev_user_msgs[-1]
+                pronoun_triggers = ["he", "she", "it", "they", "this", "that", "his", "her", "their", "score", "price", "rate", "what about", "how about", "why", "when", "more"]
+                if any(p in user_message.lower().split() for p in pronoun_triggers) or len(user_message.split()) <= 4:
+                    search_query = f"{last_user_topic} {user_message}"
+
         live_context = ""
-        keywords = ["latest", "current", "who is", "news", "update", "weather", "election", "today", "2026"]
-        if any(k in user_message.lower() for k in keywords):
-            live_context = self._fetch_web_search(user_message)
+        keywords = [
+            "latest", "current", "who is", "who are", "who was", "news", "headline", "headlines", "breaking",
+            "update", "updates", "weather", "temperature", "election", "today", "todays", "yesterday", "tomorrow",
+            "2026", "score", "match", "stock", "sensex", "nifty", "gold rate", "price",
+            "politics", "political", "government", "assembly", "parliament", "chief minister", "prime minister",
+            "president", "governor", "founder", "ceo", "net worth", "capital of",
+            "movie", "movies", "film", "films", "cinema", "trailer", "teaser", "box office", "release", "releasing", "ott",
+            "actor", "actress", "director", "song", "songs", "album", "review", "reviews", "cast",
+            "tell me about", "about actor", "about person", "profile of", "age", "how old",
+            "born", "birthday", "birth date", "party", "political party",
+            "happened", "happening", "happen in", "what happened", "whats happening", "is there anything"
+        ]
+        if any(k in search_query.lower() for k in keywords):
+            live_context = await self._fetch_web_search(search_query)
 
         request.messages = self._ensure_system_prompt(request.messages, live_context)
         response = await self.provider.chat(request)
         if response and response.content:
             response.content = self._sanitize_output(response.content)
+            try:
+                from app.services.user_persona_service import user_persona_service
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(None, user_persona_service.analyze_chat_turn, user_message, response.content, "chat_service")
+            except Exception:
+                pass
         return response
 
-    async def handle_input(self, user_input: str) -> str:
+    async def handle_input(self, user_input: str, history: Optional[List[Dict[str, Any]]] = None) -> str:
         text = str(user_input).strip()
         if not text:
             return "Standing by, boss."
 
-        response = await self.chat(text)
+        messages = []
+        if history:
+            for h in history:
+                r = str(h.get("role", "")).lower()
+                c = str(h.get("content", "")).strip()
+                if c:
+                    role_enum = MessageRole.USER if r == "user" else MessageRole.ASSISTANT
+                    messages.append(ChatMessage(role=role_enum, content=c))
+
+        messages.append(ChatMessage(role=MessageRole.USER, content=text))
+        request = ChatRequest(messages=messages)
+        response = await self.chat(request)
         content = response.content if hasattr(response, "content") else str(response)
         return self._sanitize_output(content)
 
-    async def process_message(self, user_input: str) -> str:
-        return await self.handle_input(user_input)
+    async def process_message(self, user_input: str, history: Optional[List[Dict[str, Any]]] = None) -> str:
+        return await self.handle_input(user_input, history=history)
 
     async def stream_chat(
         self,
@@ -298,9 +361,16 @@ class ChatService:
             return
 
         live_context = ""
-        keywords = ["latest", "current", "who is", "news", "update", "weather", "election", "today", "2026"]
+        keywords = [
+            "latest", "current", "who is", "who are", "who was", "news", "headline", "headlines", "breaking",
+            "update", "updates", "weather", "temperature", "election", "today", "todays", "yesterday",
+            "2026", "score", "match", "stock", "sensex", "nifty", "gold rate", "price",
+            "tell me about", "about actor", "about person", "profile of", "age", "how old",
+            "born", "birthday", "birth date", "party", "political party", "chief minister", "prime minister",
+            "president", "governor", "founder", "ceo", "net worth", "capital of"
+        ]
         if any(k in user_message.lower() for k in keywords):
-            live_context = self._fetch_web_search(user_message)
+            live_context = await self._fetch_web_search(user_message)
 
         request.messages = self._ensure_system_prompt(request.messages, live_context)
         async for token in self.provider.stream_chat(request):

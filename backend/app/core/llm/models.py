@@ -35,7 +35,7 @@ class ChatRequest(BaseModel):
     )
 
     max_tokens: int = Field(
-        default=512,
+        default=4096,
         ge=1,
     )
 
@@ -61,7 +61,7 @@ class ModelConfig(BaseModel):
 
     temperature: float = 0.7
 
-    max_tokens: int = 512
+    max_tokens: int = 4096
 
 
 class ToolCall(BaseModel):

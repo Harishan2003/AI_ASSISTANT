@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     llm_provider: LLMProvider = LLMProvider.GROQ
 
     temperature: float = 0.7
-    max_tokens: int = 1024
+    max_tokens: int = 4096
     timeout: int = 60
 
     # ==================================================

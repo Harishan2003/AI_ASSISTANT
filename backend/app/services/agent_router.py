@@ -64,24 +64,32 @@ class AgentRouter:
             return "close_current_tab"
 
         # =====================================================
-        # 3. EXPLICIT FILE SHARING / ATTACHMENT
+        # 3. EXPLICIT FILE OPERATIONS & EMAIL DISPATCH
         # =====================================================
+        if any(k in text for k in ["send the email", "send this email", "send email now", "send mail now", "click send", "send it now", "hit send", "press send"]):
+            print("[AgentRouter] -> send_current_email")
+            return "send_current_email"
+
+        if any(k in text for k in ["in mail", "via mail", "via email", "by email", "send email", "send mail", "email this file", "mail this file"]) or (any(f in text for f in ["send this file", "send the file", "send file"]) and ("@" in text or "mail" in text or "email" in text)):
+            print("[AgentRouter] -> mail_action")
+            return "mail_action"
+
+        if any(k in text for k in ["move this file", "move the file", "move file", "backup this file", "backup the file", "copy this file", "copy the file", "move this folder", "move the folder"]):
+            print("[AgentRouter] -> file_action")
+            return "file_action"
+
         file_send_triggers = [
             "send this file", "send the file", "send the selected file",
             "send selected file", "send file", "share this file", "share file",
             "send this document", "send document", "send this folder", "send the selected folder"
         ]
         if any(f in text for f in file_send_triggers):
-            match = re.search(r"to\s+([a-zA-Z0-9_]+)", text)
-            if match:
-                contact_name = match.group(1).strip()
-                if contact_name.lower() not in ["whatsapp", "gmail", "chat"]:
-                    context_state.set_selected_contact(contact_name)
-
-            context_result = context_service.try_handle_context(text)
-            if context_result is not None:
-                self._last_context_result = context_result
-                return "context_execution"
+            # If target recipient is explicitly specified, route to command_executor for full disambiguation & confirmation
+            if not any(k in text for k in ["to ", "via mail", "via email", "on whatsapp", "via whatsapp"]):
+                context_result = context_service.try_handle_context(text)
+                if context_result is not None:
+                    self._last_context_result = context_result
+                    return "context_execution"
 
         # =====================================================
         # 4. EXPLICIT URL / LINK NAVIGATION
@@ -96,6 +104,86 @@ class AgentRouter:
         if self._is_media_or_browser_search_request(text):
             print("[AgentRouter] -> MEDIA & SEARCH: automate_media")
             return "automate_media"
+
+        # =====================================================
+        # 5.5. DIRECT HARDWARE & DEVICE CONTROLS
+        # =====================================================
+        if any(k in text for k in ["mute audio", "mute sound", "unmute audio", "unmute sound", "mute volume", "mute the sound", "mute"]):
+            return "mute_audio"
+
+        if re.search(r'\b(?:set|change)?\s*(?:system\s+|master\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*(?:%|percent)?\b', text):
+            return "set_volume"
+
+        if any(k in text for k in ["volume up", "increase volume", "raise volume", "turn up volume", "turn up the volume", "louder", "boost volume"]):
+            return "volume_up"
+
+        if any(k in text for k in ["volume down", "decrease volume", "lower volume", "turn down volume", "turn down the volume", "quieter", "reduce volume"]):
+            return "volume_down"
+
+        if re.search(r'\b(?:set|change)?\s*(?:screen\s+|display\s+)?brightness\s+(?:to\s+)?(\d{1,3})\s*(?:%|percent)?\b', text):
+            return "set_brightness"
+
+        if any(k in text for k in ["brightness up", "increase brightness", "make screen brighter", "raise brightness", "brighter screen"]):
+            return "brightness_up"
+
+        if any(k in text for k in ["brightness down", "decrease brightness", "make screen darker", "lower brightness", "dim screen", "dim display"]):
+            return "brightness_down"
+
+        if any(k in text for k in ["play music", "pause music", "pause video", "play/pause", "pause media", "resume playback", "pause song", "resume music"]):
+            return "media_play_pause"
+
+        if any(k in text for k in ["next song", "next track", "skip song", "skip track", "play next"]):
+            return "media_next"
+
+        if any(k in text for k in ["previous song", "previous track", "last track", "play previous"]):
+            return "media_prev"
+
+        if any(k in text for k in ["stop music", "stop video", "stop playback", "stop media"]):
+            return "media_stop"
+
+        if any(k in text for k in ["lock the computer", "lock computer", "lock pc", "lock the pc", "lock screen", "lock workstation", "lock the system", "lock my pc"]):
+            return "lock_workstation"
+
+        if any(k in text for k in ["put pc to sleep", "put the pc to sleep", "sleep pc", "put computer to sleep", "sleep computer", "sleep system"]):
+            return "sleep_pc"
+
+        if any(k in text for k in ["restart the pc", "restart pc", "restart computer", "restart system", "reboot pc", "reboot system"]):
+            return "restart_pc"
+
+        if any(k in text for k in ["shutdown the pc", "shutdown pc", "shutdown computer", "shutdown system", "power off pc", "turn off pc"]):
+            return "shutdown_pc"
+
+        if any(k in text for k in ["cancel shutdown", "cancel restart", "abort shutdown", "abort restart", "stop shutdown", "stop restart"]):
+            return "cancel_shutdown"
+
+        if any(k in text for k in ["minimize all windows", "minimize windows", "show desktop", "show my desktop", "open my desktop", "open desktop", "go to desktop", "minimize everything"]):
+            return "minimize_all_windows"
+
+        if any(k in text for k in ["task view", "virtual desktops", "show task view", "open task view"]):
+            return "show_task_view"
+
+        if any(k in text for k in ["open settings", "open windows settings", "pc settings"]):
+            return "open_settings"
+
+        if any(k in text for k in ["switch window", "next window", "switch to next window", "alt tab"]):
+            return "switch_window"
+
+        if any(k in text for k in [
+            "close this application", "close this app", "close the application", "close the app",
+            "close application", "close this application using mouse", "close this app using mouse",
+            "close window using mouse", "close window", "close active window", "close current window",
+            "close it", "yes close it", "close the window", "close this", "shut this application",
+            "kill this application", "terminate this application", "i told you to close", "told you to close",
+            "close it now", "force close this application", "force close this",
+            "alt f4", "kill active window", "shut active window"
+        ]):
+            return "close_active_window"
+
+        if any(k in text for k in [
+            "what is on my screen", "what's on my screen", "read my screen", "inspect my screen", "look at my screen", "describe my screen",
+            "what is i am pointing", "what am i pointing", "what i am pointing", "pointing now", "what is under mouse", "what is under cursor", "where is my mouse"
+        ]):
+            return "inspect_screen"
 
         # =====================================================
         # 6. EXPLICIT APPLICATION / FILE / FOLDER / DRIVE LAUNCH
@@ -150,7 +238,14 @@ class AgentRouter:
             return "weather"
 
         # =====================================================
-        # 11. GENERAL SYSTEM LAUNCHER
+        # 11. AI IMAGE GENERATION
+        # =====================================================
+        if self._is_image_generation_request(text):
+            print("[AgentRouter] -> generate_image")
+            return "generate_image"
+
+        # =====================================================
+        # 11.5 GENERAL SYSTEM LAUNCHER
         # =====================================================
         system_tool = self._get_system_tool(text)
         if system_tool:
@@ -163,6 +258,42 @@ class AgentRouter:
         print("[AgentRouter] -> normal LLM")
         return None
 
+    def _is_image_generation_request(self, text: str) -> bool:
+        clean = text.lower().strip()
+        if any(clean.startswith(p) for p in [
+            "generate an image", "generate image", "generate the image", "generate that image",
+            "generate this image", "generate another image", "create an image", "create image",
+            "create the image", "create that image", "create this image", "draw an image",
+            "draw a ", "draw an ", "render an image", "render image", "render that image",
+            "render this image", "make an image", "make a photo", "generate photo", "generate wallpaper",
+            "give me an image", "give me a photo", "give me the image", "give me image",
+            "give the image", "give an image", "give a image", "give image", "give photo", "give picture",
+            "show me an image", "show me a photo", "show me image", "show the image", "show an image", "show image", "show photo",
+            "get me an image", "get me a photo", "get an image", "get the image", "get photo",
+            "send me an image", "send an image", "send the image", "send image", "send photo", "send logo",
+            "give me logo", "give me a logo", "generate logo", "generate a logo", "create logo", "create a logo",
+            "make a logo", "make logo", "design a logo", "design logo"
+        ]):
+            return True
+
+        if re.search(r'\b(?:give|show|get|send|generate|create|render|make|draw|paint|display|fetch|provide|find|design)\b.*?\b(?:image|images|picture|pictures|photo|photos|wallpaper|wallpapers|artwork|portrait|portraits|illustration|illustrations|drawing|pic|pics|logo|logos|emblem|badge|banner|mascot|sticker|icon)\b', clean):
+            return True
+
+        if re.search(r'\b(?:image|images|picture|pictures|photo|photos|wallpaper|wallpapers|portrait|portraits|pic|pics|logo|logos|emblem|badge|banner)\s+(?:of|for|with)\b', clean):
+            return True
+
+        if re.search(r'\b(?:with\s+full\s+body|full\s+body|full\s+shot|wide\s+shot|close\s+up|movie\s+poster|like\s+in\s+movie\s+poster|poster\s+style|in\s+4k|in\s+8k|in\s+1080p|1920x1080|wallpaper\s+style|cinematic\s+lighting|in\s+black\s+and\s+white|side\s+view|front\s+view|standing\s+in|wearing\s+|with\s+torn|with\s+green|another\s+one|different\s+one|more\s+realistic|different\s+pose|in\s+action)\b', clean):
+            return True
+
+        if re.search(r'\b(?:generate|render|make|create|draw|give|show|send|design)\s+(?:that|this|it|another)\s+(?:in|with)?\s*(?:\d{3,5}\s*[xX*×]\s*\d{3,5}|\d{3,4}p|4k|8k|1440p|1080p|720p)\b', clean):
+            return True
+
+        # e.g. "ajith kumar image", "superman wallpaper", "batman 4k photo", "hulk image", "friday logo"
+        if re.search(r'^[a-zA-Z0-9\s]{2,40}\s+(?:image|images|photo|photos|picture|pictures|wallpaper|wallpapers|portrait|portraits|drawing|illustration|pic|pics|logo|logos|icon|emblem)$', clean) and not any(clean.startswith(q) for q in ["what", "who", "where", "how", "why", "is"]):
+            return True
+
+        return False
+
     def _normalize(
         self,
         message: str,
@@ -171,7 +302,16 @@ class AgentRouter:
             return ""
 
         text = str(message).lower().strip()
-        text = re.sub(r"^(?:s|is|as|fridays|friday's|friday s|todays|today's|today s|today|friday)\s+", "", text).strip()
+        try:
+            from app.services.command_executor import load_user_profile
+            prof = load_user_profile()
+            agent = (prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or "").strip().lower()
+            wake = (prof.get("agent_profile", {}).get("wake_word") or prof.get("wake_word") or "").strip().lower()
+            wake_names = {name for name in [agent, wake, "friday"] if name}
+            wake_pattern = "|".join(re.escape(w) for w in wake_names)
+            text = re.sub(rf"^(?:s|is|as|todays|today's|today s|today|{wake_pattern}s|{wake_pattern}'s|{wake_pattern}\s+s|{wake_pattern})\s+", "", text).strip()
+        except Exception:
+            text = re.sub(r"^(?:s|is|as|fridays|friday's|friday s|todays|today's|today s|today|friday)\s+", "", text).strip()
 
         stt_fixes = {
             "what app": "whatsapp",

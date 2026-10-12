@@ -1,0 +1,45 @@
+{
+  "conversation_id": "test_mem_001",
+  "title": "Who is the current Prime Minister of India?",
+  "created_at": 1790592342.0530772,
+  "updated_at": 1790592409.4348214,
+  "expires_at": 1792428764.4659975,
+  "messages": [
+    {
+      "message_id": "msg_646fa133d2",
+      "role": "user",
+      "content": "Who is the current Prime Minister of India?",
+      "created_at": 1790592342.0530772
+    },
+    {
+      "message_id": "msg_5c1de83314",
+      "role": "assistant",
+      "content": "The current Prime Minister of India is Narendra Modi. He was sworn in for his third term on June 9, 2024, following the 2024 Parliamentary elections.",
+      "created_at": 1790592342.6040385
+    },
+    {
+      "message_id": "msg_62bfa482ac",
+      "role": "user",
+      "content": "When did he take office and which party does he belong to?",
+      "created_at": 1790592346.9586732
+    },
+    {
+      "message_id": "msg_f577bc6db3",
+      "role": "assistant",
+      "content": "Narendra Modi took office for his current (third) term on June 9, 2024. He belongs to the Bharatiya Janata Party (BJP).",
+      "created_at": 1790592347.5092053
+    },
+    {
+      "message_id": "msg_7e5262ffbc",
+      "role": "user",
+      "content": "What about his education?",
+      "created_at": 1790592409.0885773
+    },
+    {
+      "message_id": "msg_558fc94a6b",
+      "role": "assistant",
+      "content": "Narendra Modi holds a Bachelor of Arts (BA) degree in Political Science from Gujarat University, which he completed in 1978.",
+      "created_at": 1790592409.4348214
+    }
+  ]
+}

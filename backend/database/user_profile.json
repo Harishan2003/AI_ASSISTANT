@@ -6,9 +6,18 @@
   "email": "",
   "city": "",
   "voice_gender": "female",
+  "language": "english",
   "languages": [
-    "tamil",
-    "english",
-    "tanglish"
-  ]
+    "english"
+  ],
+  "profile": {
+    "name": "Harishan",
+    "age": "",
+    "email": "",
+    "city": ""
+  },
+  "agent_profile": {
+    "agent_name": "Friday",
+    "wake_word": "friday"
+  }
 }

@@ -1,3 +1,7 @@
 {
-  "device_monitoring_enabled": true
+  "device_monitoring_enabled": true,
+  "ocr_enabled": true,
+  "action_delay_ms": 100,
+  "verification_enabled": true,
+  "privacy_blur_sensitive": false
 }

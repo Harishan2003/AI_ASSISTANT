@@ -1,0 +1,21 @@
+{
+  "conversation_id": "test_audio_launch_session",
+  "title": "where did the audio launch as been held fo...",
+  "created_at": 1791813141.3749485,
+  "updated_at": 1791813147.738254,
+  "expires_at": 1793109147.738254,
+  "messages": [
+    {
+      "message_id": "msg_ea5fd0070c",
+      "role": "user",
+      "content": "where did the audio launch as been held for Jana Nayagan and how many people allowed",
+      "created_at": 1791813141.3749485
+    },
+    {
+      "message_id": "msg_4b98a1e4ba",
+      "role": "assistant",
+      "content": "Harishan, here are the verified details regarding the **Jana Nayagan** audio launch event, officially dubbed **Thalapathy Thiruvizha**:\n\n**Venue and Location:**\nThe event was held at the **Bukit Jalil National Stadium** in **Kuala Lumpur, Malaysia**.\n\n**Date:**\nIt took place on **December 27, 2025**.\n\n**Attendance:**\nThe event witnessed a record-breaking turnout. While some initial reports cited figures around 85,000 to 90,000, verified records and major news outlets confirm that **over 100,000 people** (often described as \"over a lakh\") attended the event. This massive crowd earned the event a place in the **Malaysia Book of Records** for the highest number of attendees at an event in Malaysia.\n\nThis event was particularly significant as it marked the audio launch for Vijay's final film before he entered politics, featuring music composed by Anirudh Ravichander.",
+      "created_at": 1791813147.738254
+    }
+  ]
+}

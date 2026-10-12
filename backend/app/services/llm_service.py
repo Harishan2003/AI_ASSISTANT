@@ -23,7 +23,7 @@ class LLMService:
         # Default to Groq if key exists, otherwise OpenAI or Ollama
         api_key = settings.groq_api_key or os.getenv("GROQ_API_KEY")
         base_url = settings.groq_url or os.getenv("GROQ_URL", "https://api.groq.com/openai/v1")
-        self.model = os.getenv("GROQ_MODEL") or settings.groq_model or "openai/gpt-oss-120b"
+        self.model = os.getenv("GROQ_MODEL") or settings.groq_model or "llama-3.3-70b-versatile"
 
         if not api_key:
             api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 import sys
+import re
+import difflib
 import time
 import json
 import asyncio
@@ -65,12 +67,14 @@ WHATSAPP_LOGS_FILE = DB_DIR / "whatsapp_logs.json"
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "enabled": False,
-    "auto_reply": True,
+    "auto_reply": False,
     "monitoring_active": False,
     "custom_auto_reply_message": None,
-    "auto_reply_template": "default",
+    "auto_reply_template": "dynamic_ai",
     "replied_count": 0,
-    "last_activity": None
+    "last_activity": None,
+    "notify_mode": "urgent",
+    "notify_target_contact": None
 }
 
 
@@ -188,43 +192,80 @@ class WhatsAppService:
         self._monitor_thread: Optional[threading.Thread] = None
         self._monitor_start_time: Optional[datetime.datetime] = None
         self._replied_ids: set = set()
-        self._replied_signatures: set = self._load_replied_cache()
+        self._replied_signatures: Dict[str, float] = {}
         self._sender_history: Dict[str, List[Dict[str, Any]]] = {}
         self.latest_urgent_alert: Optional[Dict[str, Any]] = None
+        self.latest_received_message: Optional[Dict[str, Any]] = None
+        self.latest_incoming_call: Optional[Dict[str, Any]] = None
         self.settings = self._load_settings()
         self.window = None
-
-    def _load_replied_cache(self) -> set:
-        """Loads historical replied message signatures from whatsapp_logs.json to prevent re-processing."""
-        cache = set()
-        try:
-            log_path = Path(__file__).resolve().parent.parent.parent / "database" / "whatsapp_logs.json"
-            if log_path.exists():
-                with open(log_path, "r", encoding="utf-8") as f:
-                    logs = json.load(f)
-                    if isinstance(logs, list):
-                        for entry in logs:
-                            s = (entry.get("sender") or "").strip().lower()
-                            m = (entry.get("message") or "").strip().lower()
-                            if s and m:
-                                cache.add(f"{s}:{m}")
-        except Exception as e:
-            logger.warning(f"Could not load historical replied cache: {e}")
-        return cache
 
     def _play_urgent_voice_alert(self, sender: str, message: str):
         """Speaks out loud on system speakers to immediately interrupt and alert Harishan."""
         def _speak():
             try:
+                import pythoncom
+                pythoncom.CoInitialize()
                 import win32com.client
                 speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                # Format clean short alert
                 clean_msg = message[:100].replace("\n", " ").strip()
                 speaker.Speak(f"Attention Harishan! Urgent WhatsApp message from {sender}. {clean_msg}")
+                pythoncom.CoUninitialize()
             except Exception as e:
                 logger.warning(f"Voice alert SAPI fallback: {e}")
 
         threading.Thread(target=_speak, daemon=True).start()
+
+    def _play_spoken_notification(self, sender: str, message: str):
+        """Speaks out loud to notify the user of an incoming WhatsApp message."""
+        def _speak():
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                clean_msg = message[:120].replace("\n", " ").strip()
+                speaker.Speak(f"Harishan, you have received a message from {sender}: {clean_msg}")
+                pythoncom.CoUninitialize()
+            except Exception as e:
+                logger.warning(f"Spoken notification SAPI error: {e}")
+
+        threading.Thread(target=_speak, daemon=True).start()
+
+    def _play_incoming_call_alert(self, caller: str, call_type: str = "voice"):
+        """Speaks out loud to alert the user of an incoming WhatsApp call."""
+        def _speak():
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                speaker.Speak(f"Attention Harishan! Incoming WhatsApp {call_type} call from {caller}.")
+                pythoncom.CoUninitialize()
+            except Exception as e:
+                logger.warning(f"Incoming call alert SAPI error: {e}")
+
+        threading.Thread(target=_speak, daemon=True).start()
+
+    def speak_in_call(self, text: str) -> Dict[str, Any]:
+        """Speaks a message out loud during a call to communicate with the receiver."""
+        clean_text = text.strip()
+        if not clean_text:
+            return {"success": False, "error": "No message provided to speak."}
+
+        def _speak():
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                speaker.Speak(clean_text)
+                pythoncom.CoUninitialize()
+            except Exception as e:
+                logger.warning(f"In-call SAPI error: {e}")
+
+        threading.Thread(target=_speak, daemon=True).start()
+        return {"success": True, "message": f"Spoken in call: \"{clean_text}\""}
 
     def get_urgent_alert(self) -> Optional[Dict[str, Any]]:
         """Returns the latest unacknowledged urgent WhatsApp alert."""
@@ -366,10 +407,43 @@ class WhatsAppService:
 
         return unseen
 
+    def get_live_unread_chats(self) -> List[Dict[str, Any]]:
+        """
+        Inspects WhatsApp UI for chats with unread notification badges.
+        Acts as a robust live fallback when toast notifications are disabled or missed.
+        """
+        results = []
+        if not _UIA_AVAILABLE:
+            return results
+
+        try:
+            hwnd = find_whatsapp_hwnd()
+            if not hwnd:
+                return results
+
+            root = auto.GetRootControl()
+            for win in root.GetChildren():
+                name = (win.Name or "").lower()
+                pid = win.ProcessId
+                proc_name = psutil.Process(pid).name().lower() if pid else ""
+                if "whatsapp" in proc_name or "whatsapp" in name:
+                    # Scan chat list items
+                    for item in win.GetChildren():
+                        item_text = (item.Name or "").strip()
+                        if item_text and any(k in item_text.lower() for k in ["unread message", "unread messages"]):
+                            results.append({
+                                "chat": item_text,
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                    break
+        except Exception as e:
+            logger.debug(f"Live unread inspection: {e}")
+        return results
+
     # -------------------------------------------------------------
     # WINDOW FOCUS & DETECTION
     # -------------------------------------------------------------
-    def find_or_focus_whatsapp(self, timeout: float = 3.5) -> bool:
+    def find_or_focus_whatsapp(self, timeout: float = 1.0) -> bool:
         """Locates and brings WhatsApp Desktop to the foreground safely."""
         self.window = None
         start_time = time.time()
@@ -379,7 +453,7 @@ class WhatsAppService:
             hwnd = find_whatsapp_hwnd()
             if hwnd:
                 force_focus_hwnd(hwnd)
-                time.sleep(0.3)
+                time.sleep(0.1)
 
             # 2. UIA window detection
             if _UIA_AVAILABLE:
@@ -399,21 +473,21 @@ class WhatsAppService:
                     if self.window and self.window.Exists(0, 0):
                         try:
                             self.window.SetActive()
-                            time.sleep(0.2)
+                            time.sleep(0.1)
                         except Exception:
                             pass
                         return True
                 except Exception as e:
                     logger.warning(f"UIA WhatsApp search error: {e}")
 
-            # 3. Launch protocol if window not visible
-            if time.time() - start_time < 1.0:
+            # 3. Launch protocol if window not visible (only if not running under pytest)
+            if not os.environ.get("PYTEST_CURRENT_TEST") and time.time() - start_time < 0.5:
                 try:
                     os.system("start whatsapp:")
                 except Exception:
                     pass
 
-            time.sleep(0.4)
+            time.sleep(0.2)
 
         if is_whatsapp_in_foreground() or (self.window and self.window.Exists(0, 0)) or find_whatsapp_hwnd():
             return True
@@ -585,6 +659,213 @@ class WhatsAppService:
             return {"success": False, "contact": contact_name, "error": str(e)}
 
     # -------------------------------------------------------------
+    # DYNAMIC CONTACT RESOLUTION & DISAMBIGUATION (NO HARDCODING)
+    # -------------------------------------------------------------
+    def get_known_contacts(self) -> List[str]:
+        """Collects unique known contact names from message logs and sender history."""
+        contacts = set()
+        for s in self._sender_history.keys():
+            if s and not self._is_unknown_number(s):
+                contacts.add(s)
+        if getattr(self, "latest_received_message", None):
+            s = (self.latest_received_message.get("sender") or "").strip()
+            if s and not self._is_unknown_number(s):
+                contacts.add(s)
+        try:
+            log_path = Path(__file__).resolve().parent.parent.parent / "database" / "whatsapp_logs.json"
+            if log_path.exists():
+                with open(log_path, "r", encoding="utf-8") as f:
+                    logs = json.load(f)
+                    if isinstance(logs, list):
+                        for entry in logs:
+                            s = (entry.get("sender") or "").strip()
+                            if s and not self._is_unknown_number(s):
+                                contacts.add(s)
+        except Exception:
+            pass
+        return sorted(list(contacts))
+
+    def inspect_whatsapp_search_results(self, search_query: str) -> List[str]:
+        """Dynamically inspects contact names displayed in WhatsApp Desktop's search results."""
+        results = []
+        if not _UIA_AVAILABLE:
+            return results
+        try:
+            self.find_or_focus_whatsapp()
+            if not self.window:
+                return results
+
+            search_box = self.window.EditControl(searchDepth=12)
+            if search_box.Exists(0.3, 1):
+                search_box.Click(waitTime=0.05)
+                search_box.SendKeys('{Ctrl}a{Delete}', waitTime=0.05)
+                search_box.SendKeys(search_query, waitTime=0.2)
+                time.sleep(0.35)
+
+            # Extract displayed search result names from UI Automation tree
+            def _extract_items(ctrl, depth=0):
+                if depth > 10:
+                    return
+                for item in ctrl.GetChildren():
+                    item_name = (item.Name or "").strip()
+                    c_type = (item.ControlTypeName or "").lower()
+                    if item_name and len(item_name) < 60 and item_name not in results:
+                        ignored = [
+                            "chats", "search", "search or start a new chat", "messages", "unread",
+                            "contacts", "filter unread", "new chat", "status", "channels", "communities",
+                            "type a message", "attach", "voice message", "video call", "voice call", "menu",
+                            "profile", "settings", "close", "minimize", "maximize"
+                        ]
+                        if item_name.lower() not in ignored and not item_name.lower().startswith("type a message"):
+                            # Filter out pure time strings like "10:30 AM", "Yesterday"
+                            if not re.match(r'^\d{1,2}:\d{2}(?:\s*(?:am|pm))?$', item_name, re.IGNORECASE):
+                                results.append(item_name)
+                    _extract_items(item, depth + 1)
+
+            if self.window:
+                _extract_items(self.window)
+        except Exception as e:
+            logger.warning(f"Error inspecting search results: {e}")
+        return results
+
+    def find_contact_candidates(self, query: str, live_search: bool = True) -> Dict[str, Any]:
+        """
+        Dynamically resolves contact candidates with fuzzy matching, qualifiers, and multi-candidate detection.
+        Works generically for all names (e.g. 'Kishore', 'Kishore Priyan(krct)', 'Kishore M(svv)', 'Harini').
+        No hardcoding!
+        """
+        import difflib
+        import re
+
+        clean_q = query.strip().strip('"').strip("'")
+        if clean_q.lower().startswith("to "):
+            clean_q = clean_q[3:].strip()
+        q_lower = clean_q.lower()
+
+        # Gather pool from known logs + active UI if requested
+        pool = set(self.get_known_contacts())
+        if live_search or is_whatsapp_in_foreground() or len(pool) <= 1:
+            ui_contacts = self.inspect_whatsapp_search_results(clean_q)
+            for c in ui_contacts:
+                pool.add(c)
+
+        if not pool:
+            return {"status": "single", "candidates": [clean_q], "best_match": clean_q}
+
+        # Find all contacts matching the search query as substring / tokens / name words
+        token_matches = []
+        for c in pool:
+            c_lower = c.lower()
+            c_cleaned = re.sub(r'[\(\[\{].*?[\)\]\}]', '', c_lower).strip()
+            if (q_lower == c_lower) or (q_lower == c_cleaned):
+                token_matches.append(c)
+            elif (q_lower in c_lower) or (q_lower in c_cleaned):
+                token_matches.append(c)
+            else:
+                c_words = [w.strip() for w in re.split(r'[\s\(\)\[\]_\-]+', c_lower) if w.strip()]
+                if any(q_lower == w or (len(q_lower) >= 3 and w.startswith(q_lower)) for w in c_words):
+                    token_matches.append(c)
+
+        token_matches = sorted(list(set(token_matches)))
+
+        # If multiple contacts match the query, Friday MUST ask the user which one!
+        if len(token_matches) > 1:
+            candidates_str = ", ".join([f"{i+1}. {name}" for i, name in enumerate(token_matches)])
+            return {
+                "status": "multiple",
+                "candidates": token_matches,
+                "best_match": None,
+                "prompt": f"I found multiple contacts matching '{clean_q}': {candidates_str}. Which one would you like to contact — the first one, the second one, or a specific name?"
+            }
+        elif len(token_matches) == 1:
+            match = token_matches[0]
+            # If the contact is not an exact match (e.g. has qualifiers, initials, emojis like 'Abhishek N S(krct)', 'Kishore💙'), confirm with the user
+            if match.strip().lower() != q_lower:
+                return {
+                    "status": "qualifier_match",
+                    "candidates": [match],
+                    "best_match": match,
+                    "prompt": f"I found '{match}'. Would you like me to proceed with {match} or someone else?"
+                }
+            return {"status": "single", "candidates": [match], "best_match": match}
+
+        # Fuzzy matching with difflib for typos
+        close_matches = difflib.get_close_matches(clean_q, list(pool), n=3, cutoff=0.55)
+        if len(close_matches) > 1:
+            candidates_str = ", ".join([f"{i+1}. {name}" for i, name in enumerate(close_matches)])
+            return {
+                "status": "multiple",
+                "candidates": close_matches,
+                "best_match": None,
+                "prompt": f"I found multiple similar contacts: {candidates_str}. Which one should I contact?"
+            }
+        elif len(close_matches) == 1:
+            match = close_matches[0]
+            return {
+                "status": "fuzzy_single",
+                "candidates": [match],
+                "best_match": match,
+                "prompt": f"Did you mean '{match}'?"
+            }
+
+        return {"status": "single", "candidates": [clean_q], "best_match": clean_q}
+
+    # -------------------------------------------------------------
+    # SEND FILE ATTACHMENT
+    # -------------------------------------------------------------
+    def send_file(self, contact_name: str, file_path: str) -> Dict[str, Any]:
+        """Sends a document, image, or file to the specified contact on WhatsApp."""
+        try:
+            p = Path(file_path).resolve()
+            if not p.exists() or not p.is_file():
+                return {"success": False, "error": f"File does not exist: {file_path}"}
+
+            self.search_and_open_chat(contact_name)
+            time.sleep(0.8)
+
+            rect = self._get_window_rect()
+            if _PYAUTOGUI_AVAILABLE and rect:
+                input_x = rect.left + int((rect.right - rect.left) * 0.65)
+                input_y = rect.bottom - 45
+                pyautogui.click(input_x, input_y)
+                time.sleep(0.3)
+
+            # Copy file to Windows clipboard using PowerShell HDROP & Set-Clipboard
+            staged = False
+            try:
+                from app.services.context_service import set_file_to_clipboard
+                staged = set_file_to_clipboard(str(p))
+            except Exception:
+                staged = False
+
+            if not staged:
+                abs_path = str(p).replace("'", "''")
+                cmd = f'powershell -NoProfile -Command "Set-Clipboard -Path \'{abs_path}\'"'
+                subprocess.run(cmd, shell=True, timeout=5)
+            time.sleep(0.4)
+
+            # Paste into WhatsApp Desktop
+            if _PYAUTOGUI_AVAILABLE:
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(1.0)
+                pyautogui.press('enter')
+                time.sleep(0.5)
+                # Ensure sent by sending Enter again if still in preview dialog
+                pyautogui.press('enter')
+                time.sleep(0.3)
+
+            return {
+                "success": True,
+                "contact": contact_name,
+                "file_path": str(p),
+                "file_name": p.name,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        except Exception as e:
+            logger.error(f"WhatsApp send_file failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    # -------------------------------------------------------------
     # VOICE & VIDEO CALLS
     # -------------------------------------------------------------
     def _find_call_button_control(self, is_video: bool = False):
@@ -713,14 +994,36 @@ class WhatsAppService:
     def answer_call(self) -> Dict[str, Any]:
         """Answers/attends an incoming WhatsApp voice or video call."""
         try:
-            self.find_or_focus_whatsapp(timeout=2.0)
+            self.find_or_focus_whatsapp(timeout=1.0)
             answered = False
-            if _UIA_AVAILABLE and self.window:
+
+            if _UIA_AVAILABLE:
+                try:
+                    # Check active root desktop for WhatsApp Call dialogs / popups
+                    root = auto.GetRootControl()
+                    for win in root.GetChildren():
+                        try:
+                            w_name = (win.Name or "").lower()
+                            if "whatsapp" in w_name or "call" in w_name or "incoming" in w_name:
+                                for btn_name in ["Accept", "Answer", "Accept call", "Accept voice call", "Accept video call", "Pick up"]:
+                                    btn = win.ButtonControl(searchDepth=8, Name=btn_name)
+                                    if btn.Exists(0.2, 1):
+                                        btn.Click(waitTime=0.1)
+                                        answered = True
+                                        break
+                        except Exception:
+                            continue
+                        if answered:
+                            break
+                except Exception:
+                    pass
+
+            if not answered and self.window and _UIA_AVAILABLE:
                 try:
                     for name in ["Accept", "Answer", "Accept call", "Accept voice call", "Accept video call", "Pick up"]:
-                        btn = self.window.ButtonControl(searchDepth=15, Name=name)
-                        if btn.Exists(0.3, 1):
-                            btn.Click(waitTime=0.2)
+                        btn = self.window.ButtonControl(searchDepth=12, Name=name)
+                        if btn.Exists(0.2, 1):
+                            btn.Click(waitTime=0.1)
                             answered = True
                             break
                 except Exception:
@@ -728,7 +1031,7 @@ class WhatsAppService:
 
             if not answered and _PYAUTOGUI_AVAILABLE and is_whatsapp_in_foreground():
                 pyautogui.hotkey('alt', 'a')
-                time.sleep(0.2)
+                time.sleep(0.1)
                 pyautogui.press('enter')
                 answered = True
 
@@ -852,21 +1155,31 @@ class WhatsAppService:
         # 2. Dynamic AI Chat Agent with Groq LLM
         from app.services.llm_service import llm_service
 
+        agent_name = "Friday"
+        user_name = "Harishan"
+        try:
+            from app.services.command_executor import load_user_profile
+            prof = load_user_profile()
+            agent_name = prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or "Friday"
+            user_name = prof.get("profile", {}).get("name") or prof.get("name") or "Harishan"
+        except Exception:
+            pass
+
         is_first_interaction = not bool(context and context.strip())
 
         system_instruction = (
-            "You are Friday, the personal AI Assistant and smart mediator for Harishan.\n"
-            "You are conversing on WhatsApp with '{sender}' on Harishan's behalf while he is occupied.\n"
-            "Harishan is your primary user and boss. You act as the bridge/mediator between Harishan and '{sender}'.\n\n"
+            f"You are {agent_name}, the personal AI Assistant and smart mediator for {user_name}.\n"
+            f"You are conversing on WhatsApp with '{{sender}}' on {user_name}'s behalf while he is occupied.\n"
+            f"{user_name} is your primary user and boss. You act as the bridge/mediator between {user_name} and '{{sender}}'.\n\n"
             "IDENTITY & ROLE INSTRUCTIONS:\n"
             + (
-                "- INITIAL CONTACT: Introduce yourself politely as Harishan's AI Assistant/Mediator "
-                "(e.g., in English: 'Hello! I am Friday, Harishan's personal AI Assistant.', "
-                "Tanglish: 'Hello! Naan Friday, Harishan-oda AI Assistant.', "
-                "Tamil: 'வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர்.').\n"
+                f"- INITIAL CONTACT: Introduce yourself politely as {user_name}'s AI Assistant/Mediator "
+                f"(e.g., in English: 'Hello! I am {agent_name}, {user_name}'s personal AI Assistant.', "
+                f"Tanglish: 'Hello! Naan {agent_name}, {user_name}-oda AI Assistant.', "
+                f"Tamil: 'வணக்கம்! நான் {agent_name}, {user_name}-ன் AI உதவியாளர்.').\n"
                 if is_first_interaction else
-                "- ONGOING CONVERSATION: Do NOT repeat your full introduction or greeting prefix! "
-                "Converse naturally as a mediator taking messages, answering queries, or assisting on Harishan's behalf.\n"
+                f"- ONGOING CONVERSATION: Do NOT repeat your full introduction or greeting prefix! "
+                f"Converse naturally as a mediator taking messages, answering queries, or assisting on {user_name}'s behalf.\n"
             ) +
             "\nLANGUAGE RULES:\n"
             "- If the incoming message is in Tamil (தமிழ்), reply entirely in Tamil script.\n"
@@ -874,9 +1187,9 @@ class WhatsAppService:
             "- If the incoming message is in English (or other), reply in clear, professional English.\n\n"
             "MEDIATOR BEHAVIOR RULES:\n"
             "1. Multi-Message Context: Address all thoughts/questions in the sender's message thoughtfully.\n"
-            "2. Attached Media/Files: Acknowledge receipt of images/documents/audio and confirm you forwarded them to Harishan. Never ask for vision prompts.\n"
-            "3. Availability/Calls: State that Harishan is currently engaged in work, and you have recorded their message to notify him.\n"
-            "4. Emergency/Urgency: If urgent, reassure the sender that you have immediately flagged it as HIGH PRIORITY for Harishan.\n"
+            f"2. Attached Media/Files: Acknowledge receipt of images/documents/audio and confirm you forwarded them to {user_name}. Never ask for vision prompts.\n"
+            f"3. Availability/Calls: State that {user_name} is currently engaged in work, and you have recorded their message to notify him.\n"
+            f"4. Emergency/Urgency: If urgent, reassure the sender that you have immediately flagged it as HIGH PRIORITY for {user_name}.\n"
             "5. Tone: Polite, warm, concise, professional mediator. Limit reply to 2-3 complete sentences."
         )
 
@@ -890,7 +1203,7 @@ class WhatsAppService:
             f"Incoming Message: \"{incoming_message}\"\n"
             f"Detected Language: {lang}\n"
             f"Urgency Status: {'URGENT' if is_urgent else 'Normal'}\n"
-            f"Generate Friday's mediator response:"
+            f"Generate {agent_name}'s mediator response:"
         )
 
         try:
@@ -905,20 +1218,20 @@ class WhatsAppService:
             reply_text = res.get("content", "").strip().strip('"')
 
             # Clean any leading role tags
-            for tag in ["friday:", "assistant:", "reply:", "response:"]:
+            for tag in [f"{agent_name.lower()}:", "friday:", "assistant:", "reply:", "response:"]:
                 if reply_text.lower().startswith(tag):
                     reply_text = reply_text[len(tag):].strip()
 
             # Ensure proper prefix identity is present
             if lang == "tamil":
-                if "friday" not in reply_text.lower() and "உதவியாளர்" not in reply_text:
-                    reply_text = f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {reply_text}"
+                if agent_name.lower() not in reply_text.lower() and "உதவியாளர்" not in reply_text:
+                    reply_text = f"வணக்கம்! நான் {agent_name}, {user_name}-ன் AI உதவியாளர். {reply_text}"
             elif lang == "tanglish":
-                if "friday" not in reply_text.lower() and "assistant" not in reply_text.lower():
-                    reply_text = f"Hello! Naan Friday, Harishan-oda AI Assistant. {reply_text}"
+                if agent_name.lower() not in reply_text.lower() and "assistant" not in reply_text.lower():
+                    reply_text = f"Hello! Naan {agent_name}, {user_name}-oda AI Assistant. {reply_text}"
             else:
-                if "friday" not in reply_text.lower() and "assistant" not in reply_text.lower():
-                    reply_text = f"Hello! I am Friday, Harishan's personal AI Assistant. {reply_text}"
+                if agent_name.lower() not in reply_text.lower() and "assistant" not in reply_text.lower():
+                    reply_text = f"Hello! I am {agent_name}, {user_name}'s personal AI Assistant. {reply_text}"
 
             # Validate sentence completeness
             dangling_words = ["is", "and", "to", "with", "the", "that", "for", "in", "on", "at", "a", "an", "oru", "la", "oda", "ku"]
@@ -937,25 +1250,25 @@ class WhatsAppService:
         # Deterministic fallback responses tailored by language and urgency
         if is_urgent:
             if lang == "tamil":
-                return f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {sender}, உங்கள் அவசர செய்தியைப் பெற்றுக்கொண்டேன்; உடனடியாக ஹரிஷனிடம் தெரிவித்துள்ளேன்!"
+                return f"வணக்கம்! நான் {agent_name}, {user_name}-ன் AI உதவியாளர். {sender}, உங்கள் அவசர செய்தியைப் பெற்றுக்கொண்டேன்; உடனடியாக {user_name}-யிடம் தெரிவித்துள்ளேன்!"
             elif lang == "tanglish":
-                return f"Hello! Naan Friday, Harishan-oda AI Assistant. Hi {sender}, idhu urgent message nu therinjidhu, udane Harishan kitta inform pannitten!"
+                return f"Hello! Naan {agent_name}, {user_name}-oda AI Assistant. Hi {sender}, idhu urgent message nu therinjidhu, udane {user_name} kitta inform pannitten!"
             else:
-                return f"Hello! I am Friday, Harishan's personal AI Assistant. Hi {sender}, I have recognized your message as URGENT and immediately alerted Harishan!"
+                return f"Hello! I am {agent_name}, {user_name}'s personal AI Assistant. Hi {sender}, I have recognized your message as URGENT and immediately alerted {user_name}!"
         elif is_media:
             if lang == "tamil":
-                return f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {sender}, நீங்கள் அனுப்பிய கோப்பைப் பெற்றுக்கொண்டேன். ஹரிஷன் ஓய்வு பெற்றதும் அதைப் பார்வையிடுவார்."
+                return f"வணக்கம்! நான் {agent_name}, {user_name}-ன் AI உதவியாளர். {sender}, நீங்கள் அனுப்பிய கோப்பைப் பெற்றுக்கொண்டேன். {user_name} ஓய்வு பெற்றதும் அதைப் பார்வையிடுவார்."
             elif lang == "tanglish":
-                return f"Hello! Naan Friday, Harishan-oda AI Assistant. Hi {sender}, neenga anuppuna file-a safe-a receive pannitten. Harishan free aana udane check pannuvaaru!"
+                return f"Hello! Naan {agent_name}, {user_name}-oda AI Assistant. Hi {sender}, neenga anuppuna file-a safe-a receive pannitten. {user_name} free aana udane check pannuvaaru!"
             else:
-                return f"Hello! I am Friday, Harishan's personal AI Assistant. Hi {sender}, I have received the attachment you sent and forwarded it to Harishan for review."
+                return f"Hello! I am {agent_name}, {user_name}'s personal AI Assistant. Hi {sender}, I have received the attachment you sent and forwarded it to {user_name} for review."
         else:
             if lang == "tamil":
-                return f"வணக்கம்! நான் Friday, ஹரிஷனின் AI உதவியாளர். {sender}, உங்கள் செய்தியைப் பெற்றுக்கொண்டேன். ஹரிஷன் தற்போது முக்கிய பணியில் உள்ளார், விரைவில் உங்களைத் தொடர்புகொள்வார்."
+                return f"வணக்கம்! நான் {agent_name}, {user_name}-ன் AI உதவியாளர். {sender}, உங்கள் செய்தியைப் பெற்றுக்கொண்டேன். {user_name} தற்போது முக்கிய பணியில் உள்ளார், விரைவில் உங்களைத் தொடர்புகொள்வார்."
             elif lang == "tanglish":
-                return f"Hello! Naan Friday, Harishan-oda AI Assistant. Hi {sender}, Harishan ipo important work-la irukkaru. Unga message-a avartta sollitten, seekiram ungala contact pannuvaaru."
+                return f"Hello! Naan {agent_name}, {user_name}-oda AI Assistant. Hi {sender}, {user_name} ipo important work-la irukkaru. Unga message-a avartta sollitten, seekiram ungala contact pannuvaaru."
             else:
-                return f"Hello! I am Friday, Harishan's personal AI Assistant. Hi {sender}, Harishan is currently occupied with high-priority work. I have forwarded your message to him and alerted him!"
+                return f"Hello! I am {agent_name}, {user_name}'s personal AI Assistant. Hi {sender}, {user_name} is currently occupied with high-priority work. I have forwarded your message to him and alerted him!"
 
     # -------------------------------------------------------------
     # BACKGROUND NOTIFICATION MONITOR LOOP
@@ -1020,12 +1333,16 @@ class WhatsAppService:
 
         try:
             listener = UserNotificationListener.current
-            try:
-                access = await asyncio.wait_for(listener.request_access_async(), timeout=1.5)
-            except Exception:
-                return []
+            # Only request access if not already validated
+            if not getattr(self, "_listener_access_granted", False):
+                try:
+                    access = await asyncio.wait_for(listener.request_access_async(), timeout=2.0)
+                    self._listener_access_granted = (int(access) == 1)
+                except Exception:
+                    self._listener_access_granted = False
+                    return []
 
-            if int(access) != 1:
+            if not getattr(self, "_listener_access_granted", False):
                 return []
 
             try:
@@ -1035,40 +1352,74 @@ class WhatsAppService:
 
             results = []
             now_utc = datetime.datetime.now(datetime.timezone.utc)
-            min_allowed_time = self._monitor_start_time if self._monitor_start_time else (now_utc - datetime.timedelta(seconds=45))
+            min_allowed_time = (self._monitor_start_time - datetime.timedelta(seconds=60)) if self._monitor_start_time else (now_utc - datetime.timedelta(seconds=90))
 
             for n in notifs:
                 try:
-                    app_name = (n.app_info.display_info.display_name or "").lower()
-                    app_id = (n.app_info.id or "").lower()
-                    if "whatsapp" in app_name or "whatsapp" in app_id:
-                        # Check timestamp freshness: ignore notifications created before monitoring began
-                        c_time = getattr(n, "creation_time", None)
-                        if c_time and hasattr(c_time, "tzinfo") and c_time < (min_allowed_time - datetime.timedelta(seconds=15)):
+                    app_name = ""
+                    app_id = ""
+                    try:
+                        if hasattr(n, "app_info") and n.app_info:
                             try:
-                                listener.remove_notification(n.id)
+                                if hasattr(n.app_info, "display_info") and n.app_info.display_info:
+                                    app_name = str(n.app_info.display_info.display_name or "").lower()
                             except Exception:
                                 pass
-                            continue
+                            try:
+                                app_id = str(n.app_info.id or "").lower()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
 
-                        bindings = n.notification.visual.bindings
-                        texts = []
-                        for b in bindings:
-                            for t in b.get_text_elements():
-                                if t.text and t.text.strip():
-                                    texts.append(t.text.strip())
+                    texts = []
+                    try:
+                        if hasattr(n, "notification") and n.notification:
+                            if hasattr(n.notification, "visual") and n.notification.visual:
+                                for b in n.notification.visual.bindings:
+                                    for t in b.get_text_elements():
+                                        if t.text and t.text.strip():
+                                            texts.append(t.text.strip())
+                    except Exception:
+                        pass
 
-                        if texts:
+                    is_wa = "whatsapp" in app_name or "whatsapp" in app_id
+                    if not is_wa:
+                        for t in texts:
+                            if "whatsapp" in t.lower():
+                                is_wa = True
+                                break
+
+                    if is_wa and texts:
+                        # Check timestamp freshness: ignore notifications older than monitor window
+                        c_time = getattr(n, "creation_time", None)
+                        try:
+                            if c_time and hasattr(c_time, "tzinfo") and min_allowed_time and hasattr(min_allowed_time, "tzinfo"):
+                                if c_time < min_allowed_time:
+                                    try:
+                                        listener.remove_notification(n.id)
+                                    except Exception:
+                                        pass
+                                    continue
+                        except Exception:
+                            pass
+
+                        if texts[0].lower() in ["whatsapp", "whatsapp desktop"] and len(texts) > 1:
+                            sender = texts[1]
+                            msg = " - ".join(texts[2:]) if len(texts) > 2 else ""
+                        else:
                             sender = texts[0]
                             msg = " - ".join(texts[1:]) if len(texts) > 1 else ""
-                            is_group = self._is_group_notification(sender, texts, msg)
-                            results.append({
-                                "id": n.id,
-                                "sender": sender,
-                                "message": msg,
-                                "is_group": is_group,
-                                "creation_time": c_time
-                            })
+
+                        is_group = self._is_group_notification(sender, texts, msg)
+                        results.append({
+                            "id": n.id,
+                            "sender": sender,
+                            "message": msg,
+                            "is_group": is_group,
+                            "creation_time": c_time,
+                            "raw_texts": texts
+                        })
                 except Exception:
                     continue
             return results
@@ -1077,24 +1428,29 @@ class WhatsAppService:
             return []
 
     def _monitor_loop(self):
-        """Background thread polling incoming notifications with deduplication and auto-reply."""
+        """Background thread polling incoming notifications with deduplication, spoken alerts, and auto-reply."""
         logger.info("[WhatsApp Monitor] Background thread started.")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         while self._monitoring_active:
             try:
+                now_ts = time.time()
+                # Sliding window TTL: prune signatures older than 45s
+                self._replied_signatures = {k: v for k, v in self._replied_signatures.items() if now_ts - v < 45.0}
+
                 notifications = loop.run_until_complete(self._fetch_toast_notifications())
                 for notif in notifications:
                     notif_id = notif.get("id")
                     sender = notif.get("sender", "Unknown").strip()
                     msg_text = notif.get("message", "").strip()
                     is_group = notif.get("is_group", False)
+                    raw_texts = notif.get("raw_texts", [])
 
                     msg_sig = f"{sender.lower()}:{msg_text.lower()}"
 
                     if notif_id:
-                        if notif_id in self._replied_ids or msg_sig in self._replied_signatures:
+                        if notif_id in self._replied_ids or (msg_sig in self._replied_signatures and (now_ts - self._replied_signatures[msg_sig]) < 30.0):
                             if _WINSDK_AVAILABLE:
                                 try:
                                     UserNotificationListener.current.remove_notification(notif_id)
@@ -1103,7 +1459,7 @@ class WhatsAppService:
                             continue
 
                         self._replied_ids.add(notif_id)
-                        self._replied_signatures.add(msg_sig)
+                        self._replied_signatures[msg_sig] = now_ts
 
                         # Dismiss the notification from Windows Action Center immediately
                         if _WINSDK_AVAILABLE:
@@ -1112,17 +1468,24 @@ class WhatsAppService:
                             except Exception:
                                 pass
 
-                        # STRICT REQUIREMENT 1: Never auto-reply to group chats
-                        if is_group:
-                            logger.info(f"[WhatsApp Monitor] Skipped auto-reply for group message from '{sender}': '{msg_text}'")
+                        # Check if this is an incoming call notification across all text elements
+                        full_toast_text = " ".join(raw_texts).lower()
+                        is_call = any(k in full_toast_text for k in [
+                            "incoming voice call", "incoming video call", "voice call",
+                            "video call", "calling...", "incoming call", "whatsapp call"
+                        ])
+                        if is_call:
+                            c_type = "video" if "video" in full_toast_text else "voice"
+                            self.latest_incoming_call = {
+                                "id": notif_id,
+                                "caller": sender,
+                                "call_type": c_type,
+                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                            }
+                            self._play_incoming_call_alert(sender, c_type)
                             continue
 
-                        # STRICT REQUIREMENT 2: Never auto-reply to unknown / unsaved numbers
-                        if self._is_unknown_number(sender):
-                            logger.info(f"[WhatsApp Monitor] Skipped auto-reply for unknown number '{sender}': '{msg_text}'")
-                            continue
-
-                        logger.info(f"[WhatsApp Monitor] New direct message from saved contact {sender}: {msg_text}")
+                        logger.info(f"[WhatsApp Monitor] Incoming message from '{sender}': {msg_text}")
 
                         # Check urgency and record for immediate user interruption
                         is_urgent = self.check_is_urgent(msg_text)
@@ -1133,15 +1496,44 @@ class WhatsAppService:
                                 "message": msg_text,
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                             }
-                            # Speak immediately to Harishan out loud
+
+                        # Save latest received message for quick follow-up replies
+                        self.latest_received_message = {
+                            "id": notif_id,
+                            "sender": sender,
+                            "message": msg_text,
+                            "timestamp": time.time()
+                        }
+
+                        # Spoken notification to user based on notify settings
+                        notify_mode = self.settings.get("notify_mode", "all")
+                        filter_contact = self.settings.get("notify_target_contact")
+                        should_speak = False
+                        if notify_mode == "all":
+                            should_speak = True
+                        elif notify_mode == "urgent" and is_urgent:
+                            should_speak = True
+                        elif filter_contact and (filter_contact.lower() in sender.lower() or sender.lower() in filter_contact.lower()):
+                            should_speak = True
+
+                        if should_speak:
+                            self._play_spoken_notification(sender, msg_text)
+                        elif is_urgent:
                             self._play_urgent_voice_alert(sender, msg_text)
 
                         # Record incoming message in sender conversation history
                         self.record_sender_message(sender, msg_text, role="contact")
                         sender_context = self.get_sender_context(sender)
 
-                        # If Auto-Reply is enabled for direct saved contacts
-                        if self.settings.get("auto_reply", True) and msg_text:
+                        # STRICT REQUIREMENT: Only auto-reply if enabled AND not a group AND not an unknown number
+                        can_auto_reply = (
+                            self.settings.get("auto_reply", False)
+                            and bool(msg_text)
+                            and not is_group
+                            and not self._is_unknown_number(sender)
+                        )
+
+                        if can_auto_reply:
                             reply = self.generate_auto_reply(sender, msg_text, context=sender_context)
                             self.record_sender_message(sender, reply, role="assistant")
                             self.send_message(sender, reply)
@@ -1159,11 +1551,25 @@ class WhatsAppService:
                                         wp.SetWindowVisualState(auto.WindowVisualState.Minimized)
                                 except Exception:
                                     pass
+                        else:
+                            self._log_message_event(sender, msg_text, reply_sent="", is_urgent=is_urgent)
+                            self.settings["last_activity"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                            self._save_settings()
 
             except Exception as e:
                 logger.error(f"[WhatsApp Monitor] Polling error: {e}")
 
-            for _ in range(15):
+            # Adaptive power-aware polling: longer sleep if running on battery to preserve power
+            on_battery = False
+            try:
+                b = psutil.sensors_battery()
+                if b and not b.power_plugged:
+                    on_battery = True
+            except Exception:
+                pass
+
+            sleep_steps = 10 if on_battery else 5
+            for _ in range(sleep_steps):
                 if not self._monitoring_active:
                     break
                 time.sleep(0.2)
@@ -1171,14 +1577,27 @@ class WhatsAppService:
         loop.close()
         logger.info("[WhatsApp Monitor] Background thread terminated.")
 
-    def set_monitoring(self, enabled: Optional[bool] = None, auto_reply: Optional[bool] = None, custom_auto_reply_message: Optional[str] = None) -> Dict[str, Any]:
+    def set_monitoring(
+        self,
+        enabled: Optional[bool] = None,
+        auto_reply: Optional[bool] = None,
+        custom_auto_reply_message: Optional[str] = None,
+        notify_mode: Optional[str] = None,
+        notify_target_contact: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Toggles background WhatsApp monitoring on or off and configures auto-reply parameters."""
         if enabled is not None:
             self.settings["enabled"] = enabled
         if auto_reply is not None:
             self.settings["auto_reply"] = auto_reply
+            if auto_reply:
+                self.settings["enabled"] = True
         if custom_auto_reply_message is not None:
             self.settings["custom_auto_reply_message"] = custom_auto_reply_message
+        if notify_mode is not None:
+            self.settings["notify_mode"] = notify_mode
+        if notify_target_contact is not None:
+            self.settings["notify_target_contact"] = notify_target_contact
 
         current_enabled = self.settings.get("enabled", False)
         if current_enabled:
@@ -1196,8 +1615,10 @@ class WhatsAppService:
         return {
             "status": "success",
             "monitoring_active": self._monitoring_active,
-            "auto_reply": self.settings.get("auto_reply", True),
+            "auto_reply": self.settings.get("auto_reply", False),
             "custom_auto_reply_message": self.settings.get("custom_auto_reply_message"),
+            "notify_mode": self.settings.get("notify_mode", "all"),
+            "notify_target_contact": self.settings.get("notify_target_contact"),
             "winsdk_available": _WINSDK_AVAILABLE,
             "uia_available": _UIA_AVAILABLE
         }
@@ -1207,8 +1628,10 @@ class WhatsAppService:
         return {
             "enabled": self.settings.get("enabled", False),
             "monitoring_active": self._monitoring_active,
-            "auto_reply": self.settings.get("auto_reply", True),
+            "auto_reply": self.settings.get("auto_reply", False),
             "custom_auto_reply_message": self.settings.get("custom_auto_reply_message"),
+            "notify_mode": self.settings.get("notify_mode", "all"),
+            "notify_target_contact": self.settings.get("notify_target_contact"),
             "replied_count": self.settings.get("replied_count", 0),
             "last_activity": self.settings.get("last_activity"),
             "winsdk_available": _WINSDK_AVAILABLE,

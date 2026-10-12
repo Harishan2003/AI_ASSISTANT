@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "auto_reply": false,
+  "monitoring_active": false,
+  "custom_auto_reply_message": "",
+  "auto_reply_template": "dynamic_ai",
+  "replied_count": 0,
+  "last_activity": null,
+  "notify_mode": "urgent",
+  "notify_target_contact": null
+}
