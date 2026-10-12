@@ -1,13 +1,5 @@
 [
   {
-    "timestamp": "2026-09-17 13:21:48",
-    "sender": "Dinesh(krct)",
-    "message": "\ud83e\udd1d",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. i will call u later",
-    "is_urgent": false,
-    "read": true
-  },
-  {
     "timestamp": "2026-09-17 13:22:36",
     "sender": "Dinesh(krct)",
     "message": "\ud83e\udd1d",
@@ -795,6 +787,14 @@
     "timestamp": "2026-10-12 21:20:08",
     "sender": "Abhishek N S(krct)",
     "message": "Athaan poten eh",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-12 22:12:38",
+    "sender": "Requesting your permission in Terminal:",
+    "message": "Command: dir \"whatsapp refence plugin\"",
     "reply": "",
     "is_urgent": false,
     "read": false

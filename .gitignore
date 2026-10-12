@@ -35,6 +35,9 @@ venv.bak/
 backend/.venv/
 backend/venv/
 backend/env/
+frontend/.venv/
+.python-version
+pip-wheel-metadata/
 
 # Packaging & Distribution
 build/
@@ -54,7 +57,7 @@ wheels/
 *.egg
 MANIFEST
 
-# Testing & Type Checking / Linting
+# Testing, Linting & Type Checking
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -85,7 +88,10 @@ yarn-error.log*
 .eslintcache
 .stylelintcache
 .oxlintrc.json
+frontend/.oxlintrc.json
 *.tsbuildinfo
+.turbo/
+.parcel-cache/
 
 # ------------------------------------------------------------------------------
 # 4. Environment Variables, API Keys & Secrets
@@ -98,17 +104,25 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.template
 
-# Certificates and Keys
+# Certificates, Keys & Credentials
 *.pem
 *.key
 *.cert
 *.crt
 *.pfx
 *.p12
+credentials.json
+service_account*.json
+token.json
+tokens.json
 
 # ------------------------------------------------------------------------------
-# 5. IDEs, Editors & AI Agent Caches
+# 5. IDEs, Editors & AI Agent Artifacts
 # ------------------------------------------------------------------------------
 .vscode/*
 !.vscode/settings.json
@@ -125,11 +139,15 @@ yarn-error.log*
 *~
 .agents/
 .gemini/
+.system_generated/
+.tempmediaStorage/
+.user_uploaded/
 
 # ------------------------------------------------------------------------------
 # 6. Temporary & Scratch Files
 # ------------------------------------------------------------------------------
 scratch/
+backend/scratch/
 *.tmp
 *.temp
 *.bak
@@ -138,12 +156,15 @@ scratch/
 # 7. Logs & Diagnostics
 # ------------------------------------------------------------------------------
 *.log
+*.log.*
 logs/*
 !logs/.gitkeep
 backend/logs/*
 !backend/logs/.gitkeep
 @AutomationLog.txt
+backend/@AutomationLog.txt
 *Log.txt
+debug_*.txt
 
 # ------------------------------------------------------------------------------
 # 8. Databases, Backups & Conversation History
@@ -158,30 +179,54 @@ backend/logs/*
 
 # Database runtime data & backups
 database/*.db
+backend/database/*.db
 database/postgres/data/
 database/backups/*
 !database/backups/.gitkeep
-backend/database/conversations/conv_*.json
-backend/database/conversations/pe*.json
+
+# Runtime conversation logs & caches
+backend/database/cache/*
+!backend/database/cache/.gitkeep
+backend/database/conversations/*.json
+!backend/database/conversations/.gitkeep
+database/conversations/*.json
+!database/conversations/.gitkeep
 backend/database/whatsapp_logs.json
 
-# ------------------------------------------------------------------------------
-# 9. Memory, Vector Stores & Uploads
-# ------------------------------------------------------------------------------
-memory/chroma/data/
-memory/cache/uploads/*
-!memory/cache/uploads/.gitkeep
-uploads/audio/*
-!uploads/audio/.gitkeep
-uploads/documents/*
-!uploads/documents/.gitkeep
-uploads/images/*
-!uploads/images/.gitkeep
-uploads/videos/*
-!uploads/videos/.gitkeep
+# Generated media in database
+backend/database/edited_images/*
+!backend/database/edited_images/.gitkeep
+backend/database/face_swaps/*
+!backend/database/face_swaps/.gitkeep
+backend/database/generated_images/*
+!backend/database/generated_images/.gitkeep
 
 # ------------------------------------------------------------------------------
-# 10. AI / ML Models & Heavy Binaries
+# 9. Memory, Vector Stores & User Uploads
+# ------------------------------------------------------------------------------
+memory/chroma/*
+!memory/chroma/.gitkeep
+memory/cache/sessions/*
+!memory/cache/sessions/.gitkeep
+memory/cache/session_*.json
+memory/cache/long_term_facts.json
+memory/cache/uploads/*
+!memory/cache/uploads/.gitkeep
+memory/embeddings/vector_store.json
+memory/embeddings/*.json
+!memory/embeddings/.gitkeep
+backend/memory/
+
+# Upload folders
+uploads/*
+uploads/**/*
+!uploads/**/.gitkeep
+backend/uploads/*
+backend/uploads/**/*
+!backend/uploads/**/.gitkeep
+
+# ------------------------------------------------------------------------------
+# 10. AI / ML Models & Heavy Weights / Checkpoints
 # ------------------------------------------------------------------------------
 *.onnx
 *.onnx.json
@@ -204,10 +249,18 @@ models/whisper/*
 models/piper/*
 models/vision/*
 models/embeddings/*
-backend/models/piper/**/*.onnx
-backend/models/piper/**/*.json
-backend/models/sherpa/**/*.onnx
-backend/models/sherpa/**/*.txt
+models/local/*
+!models/**/.gitkeep
+backend/models/piper/**
+!backend/models/piper/**/.gitkeep
+backend/models/sherpa/**
+!backend/models/sherpa/**/.gitkeep
+backend/models/whisper/**
+!backend/models/whisper/**/.gitkeep
+backend/app/models/sherpa/**
+!backend/app/models/sherpa/**/.gitkeep
+backend/app/models/piper/**
+!backend/app/models/piper/**/.gitkeep
 
 # ------------------------------------------------------------------------------
 # 11. Audio / Media Output & Test Dumps
@@ -219,7 +272,19 @@ backend/models/sherpa/**/*.txt
 *.m4a
 *.webm
 *.mp4
+backend/*.wav
+backend/*.mp3
 
-# Retain essential frontend static assets if any
+# Retain essential frontend static assets
 !frontend/src/assets/**
 !frontend/public/**
+
+# ------------------------------------------------------------------------------
+# 12. Browser Automation, Web Scraping & Playwright Profiles
+# ------------------------------------------------------------------------------
+.playwright/
+playwright/.cache/
+playwright-report/
+test-results/
+chrome_profile/
+edge_profile/
