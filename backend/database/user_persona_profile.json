@@ -1,0 +1,455 @@
+{
+  "user_name": "Harishan",
+  "agent_name": "Friday",
+  "relationship_status": "Trusted Companion & Personal AI Advisor",
+  "rapport_level": 95,
+  "care_score": 100,
+  "total_turns_analyzed": 1065,
+  "last_interaction_timestamp": 1791822138.373249,
+  "persona_tone": "warm, friendly, caring, encouraging, deeply intelligent, proactive",
+  "communication_style": {
+    "preferred_format": "direct, clean, supportive, empathetic",
+    "humor_receptivity": "appreciates subtle wit and genuine warmth",
+    "language": "english",
+    "languages_spoken": [
+      "english",
+      "tamil",
+      "tanglish"
+    ]
+  },
+  "wellbeing": {
+    "current_mood": "focused",
+    "recent_mood_history": [
+      {
+        "timestamp": 1791820627.0892625,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791820627.0007808,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791820486.7400558,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791820486.5789628,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791819601.2034137,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791819601.1806552,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791811420.5150552,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791811319.3636153,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791481520.7092366,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791481010.5171466,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791480450.26642,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791480407.9086144,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791480395.9657774,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791480393.2087953,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791480219.4016008,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791479726.1055164,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791479708.081246,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791371055.9477232,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791370640.1055477,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      },
+      {
+        "timestamp": 1791370620.046211,
+        "mood": "focused",
+        "reason": "User alert, refreshed or corrected fatigue state",
+        "stress_level": "low"
+      }
+    ],
+    "stress_level": "low",
+    "late_night_sessions_detected": 205,
+    "last_wellbeing_checkin": 1791187800.0,
+    "active_care_reminders": [
+      "Ensure regular hydration during deep focus sessions",
+      "Take periodic 5-minute screen/eye rests",
+      "Maintain balanced rest after late-night sessions"
+    ]
+  },
+  "interests_and_domains": [
+    {
+      "topic": "Tamil",
+      "weight": 51,
+      "last_mentioned": 1791811420.594841
+    },
+    {
+      "topic": "English",
+      "weight": 16,
+      "last_mentioned": 1791809186.9785461
+    },
+    {
+      "topic": "Python",
+      "weight": 11,
+      "last_mentioned": 1791821978.9374688
+    },
+    {
+      "topic": "AI & Autonomous Agents",
+      "weight": 10,
+      "last_mentioned": 1791126518.0114338
+    },
+    {
+      "topic": "Python & FastAPI Development",
+      "weight": 9,
+      "last_mentioned": 1791126518.0114338
+    },
+    {
+      "topic": "Desktop Automation & HUD UI",
+      "weight": 9,
+      "last_mentioned": 1791126518.0114338
+    },
+    {
+      "topic": "Hardware & Dual-GPU Optimization",
+      "weight": 8,
+      "last_mentioned": 1791126518.0114338
+    },
+    {
+      "topic": "Music",
+      "weight": 3,
+      "last_mentioned": 1791811420.5700428
+    },
+    {
+      "topic": "Fastapi",
+      "weight": 1,
+      "last_mentioned": 1791198481.3179426
+    }
+  ],
+  "active_projects_and_goals": [
+    {
+      "id": "proj_friday",
+      "title": "Friday AI Assistant Ecosystem",
+      "status": "active",
+      "notes": "Building autonomous Windows PC assistant with HUD, MCP, voice, and deep personal care",
+      "created_at": 1791126518.0114338
+    },
+    {
+      "id": "proj_9190c5",
+      "title": "An Autonomous Desktop Ai Assis",
+      "notes": "Extracted from conversation turn: 'I am building an autonomous desktop AI assistant and I prefer dark theme UI'",
+      "status": "active",
+      "created_at": 1791126518.1795037,
+      "updated_at": 1791180618.3105953
+    },
+    {
+      "id": "proj_e39ba0",
+      "title": "Prompt For A Fastapi Authentic",
+      "notes": "Extracted from conversation turn: 'create a coding prompt for a FastAPI authentication system with JWT'",
+      "status": "active",
+      "created_at": 1791198481.2774646
+    },
+    {
+      "id": "proj_e94680",
+      "title": "A Shallow Depth Of Field",
+      "notes": "Extracted from conversation turn: 'A detailed, close-up cinematic photograph of a distinguished fictional Tamil act'",
+      "status": "active",
+      "created_at": 1791221649.8419752,
+      "updated_at": 1791222776.144149
+    },
+    {
+      "id": "proj_a4a64c",
+      "title": "The Ai Assistant Project And P",
+      "notes": "Extracted from conversation turn: 'I am working on the AI Assistant project and preparing my resume.'",
+      "status": "active",
+      "created_at": 1791479708.0587323,
+      "updated_at": 1791480219.3793988
+    },
+    {
+      "id": "proj_60aadf",
+      "title": "Earlier",
+      "notes": "Extracted from conversation turn: 'What project did I mention I was working on earlier?'",
+      "status": "active",
+      "created_at": 1791479708.1767697,
+      "updated_at": 1791480219.486713
+    }
+  ],
+  "learned_habits_and_preferences": [
+    "Prefers lightning-fast responses with clean factual precision",
+    "Appreciates proactive care, thoughtful advice, and friendly check-ins",
+    "Uses Windows Laptop with dual GPU setup (NVIDIA RTX 3050 & AMD Radeon)",
+    "User preference: dark theme ui",
+    "User preference: love to to to code"
+  ],
+  "insights_history": [
+    {
+      "id": "ins_38c96d3e",
+      "timestamp": 1791480219.4902332,
+      "category": "project",
+      "summary": "Active project noted: Earlier",
+      "sentiment": "positive",
+      "session_id": "one_to_one"
+    },
+    {
+      "id": "ins_2c00358c",
+      "timestamp": 1791480219.3824604,
+      "category": "project",
+      "summary": "Active project noted: The Ai Assistant Project And P",
+      "sentiment": "positive",
+      "session_id": "conv_general"
+    },
+    {
+      "id": "ins_b816bc53",
+      "timestamp": 1791479726.1919203,
+      "category": "project",
+      "summary": "Active project noted: Earlier",
+      "sentiment": "positive",
+      "session_id": "one_to_one"
+    },
+    {
+      "id": "ins_496d5f34",
+      "timestamp": 1791479726.0866477,
+      "category": "project",
+      "summary": "Active project noted: The Ai Assistant Project And P",
+      "sentiment": "positive",
+      "session_id": "conv_general"
+    },
+    {
+      "id": "ins_017d68f9",
+      "timestamp": 1791479708.1827698,
+      "category": "project",
+      "summary": "Active project noted: Earlier",
+      "sentiment": "positive",
+      "session_id": "one_to_one"
+    },
+    {
+      "id": "ins_e1ea59a8",
+      "timestamp": 1791479708.063236,
+      "category": "project",
+      "summary": "Active project noted: The Ai Assistant Project And P",
+      "sentiment": "positive",
+      "session_id": "conv_general"
+    },
+    {
+      "id": "ins_acc21744",
+      "timestamp": 1791222776.151277,
+      "category": "project",
+      "summary": "Active project noted: A Shallow Depth Of Field",
+      "sentiment": "positive",
+      "session_id": "conv_k2wtbgq"
+    },
+    {
+      "id": "ins_b2e5ceb0",
+      "timestamp": 1791221850.8540251,
+      "category": "project",
+      "summary": "Active project noted: A Shallow Depth Of Field",
+      "sentiment": "positive",
+      "session_id": "test_cinematic_actor"
+    },
+    {
+      "id": "ins_5ea73812",
+      "timestamp": 1791221649.8592377,
+      "category": "project",
+      "summary": "Active project noted: A Shallow Depth Of Field",
+      "sentiment": "positive",
+      "session_id": "conv_k2wtbgq"
+    },
+    {
+      "id": "ins_9a55fb83",
+      "timestamp": 1791198481.2811544,
+      "category": "project",
+      "summary": "Active project noted: Prompt For A Fastapi Authentic",
+      "sentiment": "positive",
+      "session_id": "default"
+    },
+    {
+      "id": "ins_1e16776a",
+      "timestamp": 1791180618.3442922,
+      "category": "preference",
+      "summary": "Learned user preference: dark theme ui",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_cbeee87c",
+      "timestamp": 1791180618.3105953,
+      "category": "project",
+      "summary": "Active project noted: An Autonomous Desktop Ai Assis",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_6669c744",
+      "timestamp": 1791180618.271845,
+      "category": "wellbeing",
+      "summary": "User reported feeling tired/sleepy at 11:40 AM. Suggested resting and hydration.",
+      "sentiment": "negative",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_ce04b753",
+      "timestamp": 1791180511.5737453,
+      "category": "preference",
+      "summary": "Learned user preference: dark theme ui",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_dae2686e",
+      "timestamp": 1791180511.5273297,
+      "category": "project",
+      "summary": "Active project noted: An Autonomous Desktop Ai Assis",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_e3aaa0e0",
+      "timestamp": 1791180511.4753497,
+      "category": "wellbeing",
+      "summary": "User reported feeling tired/sleepy at 11:38 AM. Suggested resting and hydration.",
+      "sentiment": "negative",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_b37e0393",
+      "timestamp": 1791130699.4555383,
+      "category": "preference",
+      "summary": "Learned user preference: love to to to code",
+      "sentiment": "positive",
+      "session_id": "conv_k2wtbgq"
+    },
+    {
+      "id": "ins_f1999a47",
+      "timestamp": 1791127532.5005214,
+      "category": "preference",
+      "summary": "Learned user preference: love to to to code",
+      "sentiment": "positive",
+      "session_id": "conv_k2wtbgq"
+    },
+    {
+      "id": "ins_ee6faf75",
+      "timestamp": 1791127188.4861813,
+      "category": "preference",
+      "summary": "Learned user preference: dark theme ui",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_dcc40cb8",
+      "timestamp": 1791127188.4417372,
+      "category": "project",
+      "summary": "Active project noted: An Autonomous Desktop Ai Assis",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_156bf884",
+      "timestamp": 1791127188.383069,
+      "category": "wellbeing",
+      "summary": "User reported feeling tired/sleepy at 08:49 PM. Suggested resting and hydration.",
+      "sentiment": "negative",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_9f6061fd",
+      "timestamp": 1791126518.233842,
+      "category": "preference",
+      "summary": "Learned user preference: dark theme ui",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_620da0d8",
+      "timestamp": 1791126518.1835396,
+      "category": "project",
+      "summary": "Active project noted: An Autonomous Desktop Ai Assis",
+      "sentiment": "positive",
+      "session_id": "test_session"
+    },
+    {
+      "id": "ins_a809e5e8",
+      "timestamp": 1791126518.1090832,
+      "category": "wellbeing",
+      "summary": "User reported feeling tired/sleepy at 08:38 PM. Suggested resting and hydration.",
+      "sentiment": "negative",
+      "session_id": "test_session"
+    },
+    {
+      "id": "insight_init",
+      "timestamp": 1791126518.0114338,
+      "category": "care",
+      "summary": "Persona initialized with caring companion & advisor directive for Harishan."
+    }
+  ]
+}

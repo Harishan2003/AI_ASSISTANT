@@ -2,5 +2,6 @@
   "eco_mode": true,
   "auto_battery_saver": true,
   "telemetry_interval_battery": 6.0,
-  "telemetry_interval_ac": 2.0
+  "telemetry_interval_ac": 2.0,
+  "active_profile": "saver"
 }

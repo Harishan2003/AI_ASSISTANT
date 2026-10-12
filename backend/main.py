@@ -8,6 +8,7 @@ autonomous agent task orchestration, security controls, and hardware power optim
 import asyncio
 import json
 import os
+import sys
 import subprocess
 import time
 from pathlib import Path
@@ -169,17 +170,27 @@ def save_friday_master(master_data: Dict[str, Any]) -> None:
 # -----------------------------------------------------------------------------
 
 class ProfileUpdateRequest(BaseModel):
-    name: str
+    name: Optional[str] = "Harishan"
     agent_name: Optional[str] = "Friday"
+    wake_word: Optional[str] = None
     age: Optional[str] = ""
     email: Optional[str] = ""
     city: Optional[str] = ""
     voice_gender: Optional[str] = "female"
+    language: Optional[str] = "english"
     languages: Optional[List[str]] = ["english", "tamil", "tanglish"]
+    profile: Optional[Dict[str, Any]] = None
+    agent_profile: Optional[Dict[str, Any]] = None
 
 
 class AddPathRequest(BaseModel):
     route_name: str
+    path: str
+
+
+class UpdatePathRequest(BaseModel):
+    old_route_name: str
+    new_route_name: str
     path: str
 
 
@@ -263,6 +274,56 @@ class TTSRequest(BaseModel):
     voice: Optional[str] = None
 
 
+class DesktopOverlaySettingsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    opacity: Optional[float] = None
+    scale: Optional[float] = None
+    reset_position: Optional[bool] = None
+
+
+class VoiceStateRequest(BaseModel):
+    state: Optional[str] = None
+    is_listening: Optional[bool] = None
+    is_thinking: Optional[bool] = None
+    is_speaking: Optional[bool] = None
+
+
+OVERLAY_CONFIG_FILE = DATABASE_DIR / "overlay_config.json"
+DEFAULT_OVERLAY_CONFIG: Dict[str, Any] = {
+    "enabled": False,
+    "opacity": 1.0,
+    "scale": 0.85,
+    "reset_position": False
+}
+DESKTOP_OVERLAY_PROCESS = None
+
+VOICE_STATE: Dict[str, Any] = {
+    "state": "listening",
+    "is_listening": True,
+    "is_thinking": False,
+    "is_speaking": False
+}
+
+
+def load_overlay_config() -> Dict[str, Any]:
+    if OVERLAY_CONFIG_FILE.exists():
+        try:
+            with open(OVERLAY_CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {**DEFAULT_OVERLAY_CONFIG, **data}
+        except Exception:
+            pass
+    return DEFAULT_OVERLAY_CONFIG.copy()
+
+
+def save_overlay_config(cfg: Dict[str, Any]) -> None:
+    try:
+        with open(OVERLAY_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+
 # -----------------------------------------------------------------------------
 # FASTAPI APPLICATION SETUP & LIFECYCLE
 # -----------------------------------------------------------------------------
@@ -277,9 +338,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.mcp import mount_mcp_to_app
+from app.api.v1.system_api import router as system_router
+
 app.include_router(memory_router, prefix="/api/v1")
 app.include_router(api_v1_router)
+app.include_router(system_router, prefix="/api")
 app.include_router(ws_router)
+mount_mcp_to_app(app)
 
 
 @app.on_event("startup")
@@ -295,14 +361,27 @@ async def startup_event():
     print(f"[Tools Registry] Registered {total_tools} agent tools successfully.", flush=True)
     monitoring_service.start()
 
-    # Auto-resume WhatsApp monitoring if enabled in settings
+    # Auto-resume WhatsApp monitoring ONLY if explicitly enabled in settings
     try:
         from app.services.whatsapp_service import whatsapp_service
-        if whatsapp_service.settings.get("enabled", False) or whatsapp_service.settings.get("monitoring_active", False):
+        if whatsapp_service.settings.get("enabled", False):
             whatsapp_service.set_monitoring(enabled=True)
             print("[WhatsApp Startup] Background monitoring successfully resumed.", flush=True)
     except Exception as e:
         print(f"[WhatsApp Startup Notice]: {e}", flush=True)
+
+    # Auto-launch desktop overlay if enabled in settings
+    try:
+        global DESKTOP_OVERLAY_PROCESS
+        cfg = load_overlay_config()
+        if cfg.get("enabled", False):
+            backend_overlay = Path(BASE_DIR) / "desktop_overlay.py"
+            script_path = str(backend_overlay if backend_overlay.exists() else ROOT_PROJECT_DIR / "desktop_overlay.py")
+            python_exe = sys.executable
+            DESKTOP_OVERLAY_PROCESS = subprocess.Popen([python_exe, script_path], cwd=str(Path(BASE_DIR)))
+            print("[DesktopOverlay Startup] Desktop Overlay HUD launched successfully.", flush=True)
+    except Exception as e:
+        print(f"[DesktopOverlay Startup Notice]: {e}", flush=True)
 
 
 @app.on_event("shutdown")
@@ -312,7 +391,14 @@ async def shutdown_event():
     Application shutdown event handler. Safely halts background monitoring threads
     and frees hardware resource hooks upon server termination.
     """
+    global DESKTOP_OVERLAY_PROCESS
     monitoring_service.stop()
+    if DESKTOP_OVERLAY_PROCESS is not None and DESKTOP_OVERLAY_PROCESS.poll() is None:
+        try:
+            DESKTOP_OVERLAY_PROCESS.terminate()
+        except Exception:
+            pass
+        DESKTOP_OVERLAY_PROCESS = None
 
 
 # -----------------------------------------------------------------------------
@@ -344,20 +430,153 @@ async def update_profile_endpoint(req: ProfileUpdateRequest):
     Returns:
         dict: Success status and the updated profile object.
     """
-    if not req.name.strip():
-        return {"status": "error", "message": "Name is mandatory"}
-    agent = req.agent_name.strip() if req.agent_name and req.agent_name.strip() else "Friday"
+    user_name = (req.profile.get("name") if req.profile and isinstance(req.profile, dict) else (req.name or "Harishan")).strip()
+    if not user_name:
+        user_name = "Harishan"
+        
+    agent = "Friday"
+    wake = "friday"
+    if req.agent_profile and isinstance(req.agent_profile, dict):
+        agent = req.agent_profile.get("agent_name") or req.agent_name or "Friday"
+        wake = req.agent_profile.get("wake_word") or req.wake_word or agent.lower()
+    else:
+        agent = req.agent_name.strip() if req.agent_name and req.agent_name.strip() else "Friday"
+        wake = (req.wake_word or agent).strip().lower()
+
+    agent = agent.strip()
+    wake = wake.strip().lower()
+
+    chosen_langs = [l.lower() for l in (req.languages or ["english", "tamil", "tanglish"])]
+    primary_lang = req.language.lower() if (req.language and req.language.lower() in chosen_langs) else (chosen_langs[0] if chosen_langs else "english")
+    
     save_user_profile({
-        "name": req.name.strip(),
+        "name": user_name,
         "agent_name": agent,
-        "wake_word": agent.lower(),
-        "age": req.age.strip(),
-        "email": req.email.strip(),
-        "city": req.city.strip(),
+        "wake_word": wake,
+        "age": (req.profile.get("age") if req.profile else req.age or "").strip(),
+        "email": (req.profile.get("email") if req.profile else req.email or "").strip(),
+        "city": (req.profile.get("city") if req.profile else req.city or "").strip(),
         "voice_gender": (req.voice_gender or "female").lower(),
-        "languages": req.languages or ["english", "tamil", "tanglish"]
+        "language": primary_lang,
+        "languages": chosen_langs,
+        "profile": {
+            "name": user_name,
+            "age": (req.profile.get("age") if req.profile else req.age or "").strip(),
+            "email": (req.profile.get("email") if req.profile else req.email or "").strip(),
+            "city": (req.profile.get("city") if req.profile else req.city or "").strip()
+        },
+        "agent_profile": {
+            "agent_name": agent,
+            "wake_word": wake
+        }
     })
     return {"status": "success", "profile": load_user_profile()}
+
+
+# -----------------------------------------------------------------------------
+# 1.1 USER PERSONA, WELLBEING & CARE ENDPOINTS
+# -----------------------------------------------------------------------------
+
+@app.get("/api/v1/persona/profile")
+@app.get("/api/persona/profile")
+async def get_user_persona_profile():
+    """
+    Fetches the comprehensive permanent user persona, wellbeing state,
+    learned habits, interests, active projects, and relationship metrics.
+    """
+    from app.services.user_persona_service import user_persona_service
+    return {"status": "success", "persona": user_persona_service.get_profile()}
+
+
+@app.post("/api/v1/persona/profile")
+@app.post("/api/persona/profile")
+async def update_user_persona_profile(updates: Dict[str, Any]):
+    """
+    Updates the permanent user persona profile and synchronizes state to disk.
+    """
+    from app.services.user_persona_service import user_persona_service
+    updated = user_persona_service.update_profile(updates)
+    return {"status": "success", "persona": updated}
+
+
+@app.get("/api/v1/persona/insights")
+@app.get("/api/persona/insights")
+async def get_user_persona_insights():
+    """
+    Fetches the latest wellbeing metrics, care recommendations, and extracted insights history.
+    """
+    from app.services.user_persona_service import user_persona_service
+    profile = user_persona_service.get_profile()
+    return {
+        "status": "success",
+        "user_name": profile.get("user_name", "Harishan"),
+        "rapport_level": profile.get("rapport_level", 95),
+        "care_score": profile.get("care_score", 100),
+        "wellbeing": profile.get("wellbeing", {}),
+        "active_projects": profile.get("active_projects_and_goals", []),
+        "interests": profile.get("interests_and_domains", []),
+        "learned_habits": profile.get("learned_habits_and_preferences", []),
+        "recent_insights": profile.get("insights_history", [])[:15],
+    }
+
+
+@app.post("/api/v1/persona/analyze")
+async def analyze_user_chat_endpoint(payload: Dict[str, Any]):
+    """
+    Manually triggers heuristic and emotional chat turn analysis to update permanent persona.
+    """
+    from app.services.user_persona_service import user_persona_service
+    user_msg = payload.get("message", "") or payload.get("user_message", "")
+    agent_resp = payload.get("response", "") or payload.get("agent_response", "")
+    session_id = payload.get("session_id", "default")
+    res = user_persona_service.analyze_chat_turn(user_msg, agent_resp, session_id=session_id)
+    return {"status": "success", "analysis": res, "profile": user_persona_service.get_profile()}
+
+
+# -----------------------------------------------------------------------------
+# 1.2 CODING AGENT ENDPOINTS (FABLE5 HERETIC CODING AGENT)
+# -----------------------------------------------------------------------------
+
+@app.post("/api/v1/coding/generate")
+async def coding_generate_endpoint(payload: Dict[str, Any]):
+    """Generates complete, verified, bug-free code for a prompt."""
+    from app.services.coding_agent_service import coding_agent_service
+    prompt = payload.get("prompt", "") or payload.get("query", "")
+    language = payload.get("language")
+    context = payload.get("context")
+    res = await coding_agent_service.generate_code(prompt=prompt, language=language, context=context)
+    return res
+
+
+@app.post("/api/v1/coding/debug")
+async def coding_debug_endpoint(payload: Dict[str, Any]):
+    """Debugs code, identifies root causes, and returns 100% working code."""
+    from app.services.coding_agent_service import coding_agent_service
+    code = payload.get("code", "")
+    error_msg = payload.get("error_message") or payload.get("error")
+    language = payload.get("language")
+    res = await coding_agent_service.debug_code(code=code, error_message=error_msg, language=language)
+    return res
+
+
+@app.post("/api/v1/coding/refactor")
+async def coding_refactor_endpoint(payload: Dict[str, Any]):
+    """Refactors code for optimal performance, modularity, and structure."""
+    from app.services.coding_agent_service import coding_agent_service
+    code = payload.get("code", "")
+    instructions = payload.get("instructions", "Refactor and optimize code")
+    language = payload.get("language")
+    res = await coding_agent_service.refactor_code(code=code, instructions=instructions, language=language)
+    return res
+
+
+@app.post("/api/v1/coding/explain")
+async def coding_explain_endpoint(payload: Dict[str, Any]):
+    """Explains code structure, algorithms, and complexity."""
+    from app.services.coding_agent_service import coding_agent_service
+    code = payload.get("code", "")
+    res = await coding_agent_service.explain_code(code=code)
+    return res
 
 
 # -----------------------------------------------------------------------------
@@ -510,6 +729,151 @@ async def update_device_monitoring_settings_endpoint(req: DeviceMonitoringSettin
 
 
 # -----------------------------------------------------------------------------
+# 3.6. DESKTOP HUD OVERLAY & VOICE STATE ENDPOINTS
+# -----------------------------------------------------------------------------
+
+@app.get("/api/v1/settings/desktop-overlay")
+async def get_desktop_overlay_settings_endpoint():
+    """
+    Retrieves current desktop overlay widget configuration and process status.
+    """
+    global DESKTOP_OVERLAY_PROCESS
+    cfg = load_overlay_config()
+    is_running = DESKTOP_OVERLAY_PROCESS is not None and DESKTOP_OVERLAY_PROCESS.poll() is None
+    cfg["enabled"] = is_running or bool(cfg.get("enabled", False))
+    return {"status": "success", "settings": cfg, **cfg}
+
+
+@app.post("/api/v1/settings/desktop-overlay")
+async def update_desktop_overlay_settings_endpoint(req: DesktopOverlaySettingsRequest):
+    """
+    Updates desktop overlay settings (enabled, opacity, scale, reset_position)
+    and manages the floating overlay process.
+    """
+    global DESKTOP_OVERLAY_PROCESS
+    cfg = load_overlay_config()
+    if req.opacity is not None:
+        cfg["opacity"] = max(0.1, min(1.0, float(req.opacity)))
+    if req.scale is not None:
+        cfg["scale"] = max(0.4, min(2.0, float(req.scale)))
+    if req.reset_position is not None:
+        cfg["reset_position"] = bool(req.reset_position)
+
+    if req.enabled is not None:
+        cfg["enabled"] = bool(req.enabled)
+        if req.enabled:
+            # Start desktop_overlay.py if not already running
+            if DESKTOP_OVERLAY_PROCESS is None or DESKTOP_OVERLAY_PROCESS.poll() is not None:
+                backend_overlay = Path(BASE_DIR) / "desktop_overlay.py"
+                script_path = str(backend_overlay if backend_overlay.exists() else ROOT_PROJECT_DIR / "desktop_overlay.py")
+                python_exe = sys.executable
+                try:
+                    DESKTOP_OVERLAY_PROCESS = subprocess.Popen([python_exe, script_path], cwd=str(Path(BASE_DIR)))
+                except Exception as e:
+                    print(f"[DesktopOverlay] Failed to start: {e}", flush=True)
+        else:
+            # Stop desktop_overlay.py
+            if DESKTOP_OVERLAY_PROCESS is not None and DESKTOP_OVERLAY_PROCESS.poll() is None:
+                try:
+                    DESKTOP_OVERLAY_PROCESS.terminate()
+                except Exception:
+                    pass
+                DESKTOP_OVERLAY_PROCESS = None
+
+    save_overlay_config(cfg)
+    is_running = DESKTOP_OVERLAY_PROCESS is not None and DESKTOP_OVERLAY_PROCESS.poll() is None
+    cfg["enabled"] = is_running
+    return {"status": "success", "settings": cfg, **cfg}
+
+
+@app.get("/api/v1/voice/state")
+async def get_voice_state_endpoint():
+    """
+    Returns current global voice state (state, is_listening, is_thinking, is_speaking).
+    """
+    return {"status": "success", **global_voice_state}
+
+
+@app.post("/api/v1/voice/state")
+async def set_voice_state_endpoint(req: VoiceStateRequest):
+    """
+    Updates voice state and broadcasts to active WebSocket connections.
+    """
+    if req.state is not None:
+        global_voice_state["state"] = req.state
+    if req.is_listening is not None:
+        global_voice_state["is_listening"] = bool(req.is_listening)
+    if req.is_thinking is not None:
+        global_voice_state["is_thinking"] = bool(req.is_thinking)
+    if req.is_speaking is not None:
+        global_voice_state["is_speaking"] = bool(req.is_speaking)
+
+    await manager.broadcast({
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    return {"status": "success", **global_voice_state}
+
+
+@app.post("/api/v1/voice/toggle-mic")
+async def toggle_mic_endpoint():
+    """
+    Toggles microphone listening state and notifies all clients.
+    """
+    global_voice_state["is_listening"] = not global_voice_state.get("is_listening", True)
+    global_voice_state["state"] = "listening" if global_voice_state["is_listening"] else "idle"
+    if not global_voice_state["is_listening"]:
+        global_voice_state["is_thinking"] = False
+        global_voice_state["is_speaking"] = False
+
+    await manager.broadcast({
+        "type": "mic_toggled",
+        "is_listening": global_voice_state["is_listening"],
+        "state": global_voice_state["state"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    await manager.broadcast({
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    return {"status": "success", **global_voice_state}
+
+
+@app.post("/api/v1/voice/stop")
+async def stop_voice_execution():
+    """
+    Explicitly halts voice speaking / agent thinking state,
+    resets to listening or idle, and broadcasts update to all connected HUDs and overlays.
+    """
+    global_voice_state["is_speaking"] = False
+    global_voice_state["is_thinking"] = False
+    global_voice_state["state"] = "listening" if global_voice_state.get("is_listening", True) else "idle"
+
+    await manager.broadcast({
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": False,
+        "is_speaking": False
+    })
+    await manager.broadcast({
+        "type": "mic_toggled",
+        "is_listening": global_voice_state["is_listening"],
+        "state": global_voice_state["state"],
+        "is_thinking": False,
+        "is_speaking": False
+    })
+    return {"status": "success", "voice_state": global_voice_state}
+
+
+# -----------------------------------------------------------------------------
 # 4. WHATSAPP PLUGIN & MONITORING ENDPOINTS
 # -----------------------------------------------------------------------------
 
@@ -617,6 +981,45 @@ async def dismiss_whatsapp_urgent_alert_endpoint():
 # 5. CONVERSATION SESSIONS & HISTORY ENDPOINTS
 # -----------------------------------------------------------------------------
 
+@app.get("/api/v1/images/{filename}")
+@app.get("/api/images/{filename}")
+async def serve_image_file_endpoint(filename: str):
+    """Serves high-resolution generated, edited, and uploaded images directly by filename."""
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    import urllib.parse
+    safe_name = os.path.basename(urllib.parse.unquote(filename))
+    
+    here = Path(__file__).resolve()
+    search_dirs = [
+        here.parent / "database" / "generated_images",
+        here.parent / "database" / "edited_images",
+        here.parent / "database" / "face_swaps",
+        here.parent.parent / "database" / "generated_images",
+        here.parent.parent / "database" / "edited_images",
+        here.parent.parent / "database" / "face_swaps",
+        DATABASE_DIR / "generated_images",
+        DATABASE_DIR / "edited_images",
+        DATABASE_DIR / "face_swaps",
+        ROOT_PROJECT_DIR / "backend" / "database" / "generated_images",
+        ROOT_PROJECT_DIR / "backend" / "database" / "edited_images",
+        ROOT_PROJECT_DIR / "backend" / "database" / "face_swaps",
+        UPLOAD_DIR,
+    ]
+    for d in search_dirs:
+        candidate = d / safe_name
+        if candidate.exists() and candidate.is_file():
+            media_type = "image/png"
+            if safe_name.lower().endswith((".jpg", ".jpeg")):
+                media_type = "image/jpeg"
+            elif safe_name.lower().endswith(".webp"):
+                media_type = "image/webp"
+            elif safe_name.lower().endswith(".gif"):
+                media_type = "image/gif"
+            return FileResponse(str(candidate), media_type=media_type)
+    raise HTTPException(status_code=404, detail="Image not found")
+
+
 @app.post("/api/v1/conversations")
 async def create_conversation_endpoint(req: Optional[CreateConversationRequest] = None):
     """
@@ -630,7 +1033,7 @@ async def create_conversation_endpoint(req: Optional[CreateConversationRequest] 
         dict: Newly created conversation metadata.
     """
     title = req.title if req and req.title else "New Session"
-    conv = conversation_memory_service.create_conversation(title=title)
+    conv = await conversation_memory_service.create_conversation(title=title)
     return {"status": "success", "conversation": conv}
 
 
@@ -822,6 +1225,7 @@ async def add_path_endpoint(req: AddPathRequest):
         for item in data["paths"]:
             if str(item.get("route_name", "")).strip().lower() == req.route_name.strip().lower():
                 item["path"] = req.path.strip()
+                item["route_name"] = req.route_name.strip()
                 existing = True
                 break
 
@@ -829,7 +1233,61 @@ async def add_path_endpoint(req: AddPathRequest):
             data["paths"].append({"route_name": req.route_name.strip(), "path": req.path.strip()})
 
         ADD_PATH_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        return {"status": "success", "message": "Path route saved successfully"}
+        return {"status": "success", "message": "Path route saved successfully", "paths": data["paths"]}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.put("/api/add-path")
+async def update_path_endpoint(req: UpdatePathRequest):
+    """
+    Updates an existing custom shortcut route_name and path in 'database/add_path.json'.
+    """
+    try:
+        DATABASE_DIR.mkdir(parents=True, exist_ok=True)
+        data = {"paths": []}
+        if ADD_PATH_FILE.exists():
+            try:
+                parsed = json.loads(ADD_PATH_FILE.read_text(encoding="utf-8"))
+                if isinstance(parsed, dict) and "paths" in parsed:
+                    data = parsed
+                elif isinstance(parsed, list):
+                    data = {"paths": parsed}
+            except Exception:
+                data = {"paths": []}
+
+        updated = False
+        for item in data["paths"]:
+            if str(item.get("route_name", "")).strip().lower() == req.old_route_name.strip().lower():
+                item["route_name"] = req.new_route_name.strip()
+                item["path"] = req.path.strip()
+                updated = True
+                break
+
+        if not updated:
+            data["paths"].append({"route_name": req.new_route_name.strip(), "path": req.path.strip()})
+
+        ADD_PATH_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return {"status": "success", "message": "Path route updated successfully", "paths": data["paths"]}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.delete("/api/add-path/{route_name:path}")
+async def delete_path_rest_endpoint(route_name: str):
+    """
+    Removes a registered custom path shortcut from 'database/add_path.json' via REST DELETE.
+    """
+    try:
+        if not ADD_PATH_FILE.exists():
+            return {"status": "success", "message": "Path not found", "paths": []}
+
+        data = json.loads(ADD_PATH_FILE.read_text(encoding="utf-8"))
+        paths = data.get("paths", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        updated_paths = [p for p in paths if str(p.get("route_name", "")).strip().lower() != route_name.strip().lower()]
+
+        ADD_PATH_FILE.write_text(json.dumps({"paths": updated_paths}, indent=2), encoding="utf-8")
+        return {"status": "success", "message": "Route deleted successfully", "paths": updated_paths}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -837,25 +1295,44 @@ async def add_path_endpoint(req: AddPathRequest):
 @app.post("/api/delete-path")
 async def delete_path_endpoint(req: DeletePathRequest):
     """
-    What does this function do:
     Removes a registered custom path shortcut from 'database/add_path.json'.
-    
-    Args:
-        req (DeletePathRequest): Contains route_name to remove.
-        
-    Returns:
-        dict: Success status.
     """
     try:
         if not ADD_PATH_FILE.exists():
-            return {"status": "success", "message": "Path not found"}
+            return {"status": "success", "message": "Path not found", "paths": []}
 
         data = json.loads(ADD_PATH_FILE.read_text(encoding="utf-8"))
         paths = data.get("paths", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
         updated_paths = [p for p in paths if str(p.get("route_name", "")).strip().lower() != req.route_name.strip().lower()]
 
         ADD_PATH_FILE.write_text(json.dumps({"paths": updated_paths}, indent=2), encoding="utf-8")
-        return {"status": "success", "message": "Route deleted successfully"}
+        return {"status": "success", "message": "Route deleted successfully", "paths": updated_paths}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/test-path")
+async def test_path_endpoint(req: AddPathRequest):
+    """
+    Directly tests opening the specified file or folder in File Explorer or default application.
+    """
+    try:
+        p_str = req.path.strip()
+        target_path = Path(p_str)
+        if not target_path.exists():
+            return {"status": "error", "message": f"Target path does not exist on disk: {p_str}"}
+            
+        if os.name == "nt":
+            if target_path.is_dir():
+                subprocess.Popen(["explorer.exe", str(target_path)])
+            else:
+                try:
+                    os.startfile(str(target_path))
+                except Exception:
+                    subprocess.Popen(["explorer.exe", str(target_path)])
+        else:
+            webbrowser.open(str(target_path.as_uri()))
+        return {"status": "success", "message": f"Successfully launched '{target_path.name}'"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -1156,20 +1633,33 @@ async def analyze_files_endpoint(
             saved_paths.append(dest_path)
             file_names.append(f.filename)
 
+        if saved_paths:
+            try:
+                from app.services.context_state import context_state
+                context_state.set_selected_file(str(saved_paths[0]))
+            except Exception:
+                pass
+
+        clean_p = (prompt or "").lower().strip()
+        if clean_p and (
+            "@" in clean_p or
+            any(w in clean_p for w in ["mail", "email", "whatsapp", "move", "copy", "backup", "send this", "send file", "share this", "share file", "forward"])
+        ):
+            from app.services.command_executor import execute_in_backend
+            action_reply = await execute_in_backend(prompt, session_id=session_id or "default", language=language or "english")
+            save_chat_turn(session_id, "user", f"[ATTACHMENTS ({len(saved_paths)}/6)]: {', '.join(file_names)} - {prompt}")
+            save_chat_turn(session_id, "assistant", action_reply)
+            return {
+                "response": action_reply,
+                "count": len(saved_paths),
+                "files": file_names,
+                "status": "success"
+            }
+
         save_chat_turn(session_id, "user", f"[ATTACHMENTS ({len(saved_paths)}/6)]: {', '.join(file_names)} - {prompt or 'Analyze this file.'}")
 
-        try:
-            meta_combined = []
-            for p in saved_paths:
-                m = extract_text_from_file_direct(p)
-                meta_combined.append(m["raw_text"])
-            if meta_combined:
-                full_corpus = "\n\n".join(meta_combined)
-                SESSION_DOC_CACHE[session_id] = full_corpus
-        except Exception:
-            pass
-
         report = await analyze_multiple_documents(saved_paths, prompt=prompt or "", language=language)
+        SESSION_DOC_CACHE[session_id] = report
         save_chat_turn(session_id, "assistant", report)
 
         return {
@@ -1213,8 +1703,110 @@ class ConnectionManager:
         except Exception:
             self.disconnect(websocket)
 
+    async def broadcast(self, data: dict):
+        """Broadcasts JSON payload to all active WebSocket clients."""
+        for ws in list(self.active_connections):
+            await self.safe_send_json(ws, data)
+
 
 manager = ConnectionManager()
+
+# Global synchronized voice state shared across web UI and desktop overlay
+global_voice_state = {
+    "state": "listening",
+    "is_listening": True,
+    "is_thinking": False,
+    "is_speaking": False
+}
+
+
+class VoiceStateUpdateRequest(BaseModel):
+    state: Optional[str] = None
+    is_listening: Optional[bool] = None
+    is_thinking: Optional[bool] = None
+    is_speaking: Optional[bool] = None
+
+
+@app.get("/api/v1/voice/state")
+async def get_voice_state():
+    """Returns current real-time voice state synchronized across web HUD and desktop overlay."""
+    return global_voice_state
+
+
+@app.post("/api/v1/voice/state")
+async def update_voice_state(req: VoiceStateUpdateRequest):
+    """Updates and broadcasts real-time voice state to all connected WebSockets."""
+    if req.state is not None:
+        global_voice_state["state"] = req.state
+    if req.is_listening is not None:
+        global_voice_state["is_listening"] = bool(req.is_listening)
+    if req.is_thinking is not None:
+        global_voice_state["is_thinking"] = bool(req.is_thinking)
+    if req.is_speaking is not None:
+        global_voice_state["is_speaking"] = bool(req.is_speaking)
+
+    await manager.broadcast({
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    return {"status": "success", "voice_state": global_voice_state}
+
+
+@app.post("/api/v1/voice/stop")
+async def stop_voice_execution_endpoint():
+    """Immediately halts any active audio, synthesis, or thinking execution and resets HUD state."""
+    global_voice_state["state"] = "listening"
+    global_voice_state["is_speaking"] = False
+    global_voice_state["is_thinking"] = False
+    global_voice_state["is_listening"] = True
+
+    await manager.broadcast({
+        "type": "stop",
+        "action": "stop",
+        "state": "listening",
+        "is_listening": True,
+        "is_thinking": False,
+        "is_speaking": False
+    })
+    await manager.broadcast({
+        "type": "state",
+        "data": "listening",
+        "is_listening": True,
+        "is_thinking": False,
+        "is_speaking": False
+    })
+    return {"status": "stopped", "voice_state": global_voice_state}
+
+
+@app.post("/api/v1/voice/toggle-mic")
+async def toggle_mic_endpoint():
+    """Toggles global mic listening state and broadcasts update to all connected HUDs."""
+    global_voice_state["is_listening"] = not global_voice_state.get("is_listening", True)
+    if global_voice_state["is_listening"]:
+        global_voice_state["state"] = "listening"
+    else:
+        global_voice_state["state"] = "idle"
+        global_voice_state["is_thinking"] = False
+        global_voice_state["is_speaking"] = False
+
+    await manager.broadcast({
+        "type": "mic_toggled",
+        "is_listening": global_voice_state["is_listening"],
+        "state": global_voice_state["state"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    await manager.broadcast({
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
+    return {"status": "success", **global_voice_state}
 
 
 @app.post("/api/chat")
@@ -1223,16 +1815,32 @@ async def chat_endpoint(req: ChatRequest):
     What does this function do:
     Synchronous/REST chat endpoint. Dispatches user messages into Friday's execution pipeline
     and returns the AI assistant's reply along with execution latency timing.
-    
-    Args:
-        req (ChatRequest): Contains user message, session_id, and language.
-        
-    Returns:
-        dict: Assistant response and latency string (e.g. '180ms').
     """
+    global_voice_state["state"] = "thinking"
+    global_voice_state["is_thinking"] = True
+    global_voice_state["is_speaking"] = False
+    await manager.broadcast({
+        "type": "state",
+        "data": "thinking",
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": True,
+        "is_speaking": False
+    })
+
     t0 = time.perf_counter()
     reply = await execute_in_backend(req.message, session_id=req.session_id or "default", language=req.language or "english")
     took_ms = round((time.perf_counter() - t0) * 1000)
+
+    global_voice_state["state"] = "speaking"
+    global_voice_state["is_thinking"] = False
+    global_voice_state["is_speaking"] = True
+    await manager.broadcast({
+        "type": "state",
+        "data": "speaking",
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": False,
+        "is_speaking": True
+    })
     return {"response": reply, "latency": f"{took_ms}ms"}
 
 
@@ -1249,7 +1857,8 @@ async def tts_get_endpoint(text: str, language: Optional[str] = None, gender: Op
     audio_bytes = await tts_service.synthesize(text, language=language, gender=gender, voice=voice)
     if not audio_bytes:
         return Response(content=b"", media_type="audio/mpeg", status_code=204)
-    return Response(content=audio_bytes, media_type="audio/mpeg")
+    media_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
+    return Response(content=audio_bytes, media_type=media_type)
 
 
 @app.post("/api/tts")
@@ -1265,7 +1874,8 @@ async def tts_post_endpoint(req: TTSRequest):
     audio_bytes = await tts_service.synthesize(req.text, language=req.language, gender=gender, voice=req.voice)
     if not audio_bytes:
         return Response(content=b"", media_type="audio/mpeg", status_code=204)
-    return Response(content=audio_bytes, media_type="audio/mpeg")
+    media_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
+    return Response(content=audio_bytes, media_type=media_type)
 
 
 @app.websocket("/ws/voice")
@@ -1277,6 +1887,14 @@ async def websocket_voice_endpoint(websocket: WebSocket):
     interactions with sub-second latency.
     """
     await manager.connect(websocket)
+    # Send current voice state upon connection
+    await manager.safe_send_json(websocket, {
+        "type": "state",
+        "data": global_voice_state["state"],
+        "is_listening": global_voice_state["is_listening"],
+        "is_thinking": global_voice_state["is_thinking"],
+        "is_speaking": global_voice_state["is_speaking"]
+    })
 
     async def telemetry_loop():
         """
@@ -1335,42 +1953,37 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 
                 try:
                     if os.name == "nt":
-                        if not is_eco_active:
-                            # 1. Query NVIDIA GPU 0 via nvidia-smi only when NOT in eco mode
-                            smi_res = subprocess.run(
-                                ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
-                                capture_output=True, text=True, timeout=0.6
-                            )
-                            if smi_res.returncode == 0 and smi_res.stdout.strip():
-                                line = smi_res.stdout.strip().splitlines()[0]
-                                parts = line.split(",")
-                                rtx_load = int(parts[0].strip())
-                                if len(parts) > 1 and int(parts[1].strip()) > 0:
-                                    rtx_temp = int(parts[1].strip())
+                        if not is_eco_active and not is_on_battery:
+                            # 1. Query NVIDIA GPU via nvidia-smi only on AC power (never on battery to keep dGPU in D3 sleep)
+                            try:
+                                smi_res = subprocess.run(
+                                    ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
+                                    capture_output=True, text=True, timeout=0.4
+                                )
+                                if smi_res.returncode == 0 and smi_res.stdout.strip():
+                                    line = smi_res.stdout.strip().splitlines()[0]
+                                    parts = line.split(",")
+                                    rtx_load = int(parts[0].strip())
+                                    if len(parts) > 1 and int(parts[1].strip()) > 0:
+                                        rtx_temp = int(parts[1].strip())
+                            except Exception:
+                                pass
 
-                            # 2. Dynamic AMD Radeon iGPU Telemetry via PowerShell CIM counter
-                            cmd_radeon = 'powershell -NoProfile -Command "(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object { $_.Name -like \'*engtype_3D*\' } | Measure-Object -Property UtilizationPercentage -Average).Average"'
-                            p_res = subprocess.run(cmd_radeon, shell=True, capture_output=True, text=True, timeout=0.8)
-                            if p_res.returncode == 0 and p_res.stdout.strip():
-                                try:
-                                    val = float(p_res.stdout.strip().splitlines()[0])
-                                    if val >= 0:
-                                        radeon_load = int(min(100, max(0, val)))
-                                except Exception:
-                                    pass
-                            
-                            if radeon_load == 0:
-                                radeon_load = int(min(25, max(2, int(cpu * 0.2))))
+                            # 2. Dynamic Radeon iGPU estimation based on CPU load (zero PowerShell subprocess overhead)
+                            radeon_load = int(min(35, max(1, int(cpu * 0.25))))
+                            radeon_temp = int(42 + min(18, int(cpu * 0.2)))
                         else:
-                            # Eco / Battery Saver Mode: Zero subprocess wakeups, smooth hardware estimation
-                            radeon_load = int(min(20, max(1, int(cpu * 0.15))))
-                            radeon_temp = int(40 + min(15, int(cpu * 0.2)))
+                            # Eco / Battery Saver Mode: Zero subprocess wakeups, dedicated GPU in D3 sleep
+                            rtx_load = 0
+                            rtx_temp = 38
+                            radeon_load = int(min(15, max(1, int(cpu * 0.12))))
+                            radeon_temp = int(38 + min(12, int(cpu * 0.15)))
                 except Exception:
-                    radeon_load = 2
-                    radeon_temp = 42
+                    radeon_load = 1
+                    radeon_temp = 40
 
                 gpus_telemetry = [
-                    {"id": "gpu0", "label": "GPU 0", "shortName": "RTX 3050" + (" (D3 Sleep)" if is_eco_active and rtx_load == 0 else ""), "load": rtx_load, "temp": rtx_temp},
+                    {"id": "gpu0", "label": "GPU 0", "shortName": "RTX 3050" + (" (D3 Sleep)" if (is_eco_active or is_on_battery) and rtx_load == 0 else ""), "load": rtx_load, "temp": rtx_temp},
                     {"id": "gpu1", "label": "GPU 1", "shortName": "Radeon", "load": radeon_load, "temp": radeon_temp}
                 ]
 
@@ -1460,20 +2073,104 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 lang = payload.get("language", "english")
                 t0 = time.perf_counter()
 
-                await manager.safe_send_json(websocket, {"type": "state", "data": "thinking"})
+                global_voice_state["state"] = "thinking"
+                global_voice_state["is_thinking"] = True
+                global_voice_state["is_speaking"] = False
+                await manager.broadcast({
+                    "type": "state",
+                    "data": "thinking",
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": True,
+                    "is_speaking": False
+                })
+
                 reply = await execute_in_backend(user_msg, session_id=session_id, language=lang)
                 took_ms = round((time.perf_counter() - t0) * 1000)
 
+                global_voice_state["state"] = "speaking"
+                global_voice_state["is_thinking"] = False
+                global_voice_state["is_speaking"] = True
                 await manager.safe_send_json(websocket, {"type": "latency", "data": f"{took_ms}ms"})
                 await manager.safe_send_json(websocket, {"type": "response", "data": reply})
-                await manager.safe_send_json(websocket, {"type": "state", "data": "idle"})
+                await manager.broadcast({
+                    "type": "state",
+                    "data": "speaking",
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": False,
+                    "is_speaking": True
+                })
 
-    except WebSocketDisconnect:
+            elif payload.get("action") == "set_mic":
+                desired = bool(payload.get("is_listening", True))
+                global_voice_state["is_listening"] = desired
+                global_voice_state["state"] = "listening" if desired else "idle"
+                if not desired:
+                    global_voice_state["is_thinking"] = False
+                    global_voice_state["is_speaking"] = False
+                elif payload.get("is_speaking") is False:
+                    global_voice_state["is_speaking"] = False
+                await manager.broadcast({
+                    "type": "mic_toggled",
+                    "is_listening": global_voice_state["is_listening"],
+                    "state": global_voice_state["state"],
+                    "is_thinking": global_voice_state["is_thinking"],
+                    "is_speaking": global_voice_state["is_speaking"]
+                })
+                await manager.broadcast({
+                    "type": "state",
+                    "data": global_voice_state["state"],
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": global_voice_state["is_thinking"],
+                    "is_speaking": global_voice_state["is_speaking"]
+                })
+
+            elif payload.get("action") == "toggle_mic":
+                global_voice_state["is_listening"] = not global_voice_state.get("is_listening", True)
+                global_voice_state["state"] = "listening" if global_voice_state["is_listening"] else "idle"
+                if not global_voice_state["is_listening"]:
+                    global_voice_state["is_thinking"] = False
+                    global_voice_state["is_speaking"] = False
+                await manager.broadcast({
+                    "type": "mic_toggled",
+                    "is_listening": global_voice_state["is_listening"],
+                    "state": global_voice_state["state"],
+                    "is_thinking": global_voice_state["is_thinking"],
+                    "is_speaking": global_voice_state["is_speaking"]
+                })
+                await manager.broadcast({
+                    "type": "state",
+                    "data": global_voice_state["state"],
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": global_voice_state["is_thinking"],
+                    "is_speaking": global_voice_state["is_speaking"]
+                })
+
+            elif payload.get("action") == "stop":
+                global_voice_state["is_speaking"] = False
+                global_voice_state["is_thinking"] = False
+                global_voice_state["state"] = "listening" if global_voice_state.get("is_listening", True) else "idle"
+                await manager.broadcast({
+                    "type": "state",
+                    "data": global_voice_state["state"],
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": False,
+                    "is_speaking": False
+                })
+                await manager.broadcast({
+                    "type": "mic_toggled",
+                    "is_listening": global_voice_state["is_listening"],
+                    "state": global_voice_state["state"],
+                    "is_thinking": False,
+                    "is_speaking": False
+                })
+
+    except (WebSocketDisconnect, Exception) as err:
         manager.disconnect(websocket)
         telemetry_task.cancel()
-    except Exception:
-        manager.disconnect(websocket)
-        telemetry_task.cancel()
+        if len(manager.active_connections) == 0:
+            global_voice_state["is_thinking"] = False
+            global_voice_state["is_speaking"] = False
+            global_voice_state["state"] = "listening" if global_voice_state.get("is_listening", True) else "idle"
 
 
 # -----------------------------------------------------------------------------

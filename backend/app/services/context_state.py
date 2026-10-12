@@ -25,6 +25,12 @@ class UniversalContextState:
             self.selected_file = str(file_path)
             print(f"[ContextState] Selected File set to: {self.selected_file}")
 
+    def get_selected_file(self) -> Optional[str]:
+        return self.selected_file
+
+    def get_selected_contact(self) -> Optional[str]:
+        return self.selected_contact
+
     def set_selected_contact(self, contact_name: str):
         if contact_name:
             self.selected_contact = contact_name.strip().title()
@@ -34,6 +40,15 @@ class UniversalContextState:
         self.current_draft = draft_text.strip()
         self.draft_type = draft_type
         print(f"[ContextState] Draft ({draft_type}) set: '{self.current_draft}'")
+
+    def clear_selected_file(self):
+        self.selected_file = None
+        self.selected_folder = None
+        self.selected_item = None
+        print("[ContextState] Selected file cleared.")
+
+    def has_draft(self) -> bool:
+        return bool(self.current_draft)
 
     def clear_draft(self):
         self.current_draft = None

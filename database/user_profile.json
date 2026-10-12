@@ -1,10 +1,15 @@
 {
   "name": "Harishan",
-  "agent_name": "friday",
+  "agent_name": "Friday",
   "wake_word": "friday",
   "age": "",
   "email": "",
   "city": "",
+  "voice_gender": "female",
+  "language": "english",
+  "languages": [
+    "english"
+  ],
   "profile": {
     "name": "Harishan",
     "age": "",

@@ -21,14 +21,14 @@ from .models import (
 
 class GroqProvider(BaseLLMProvider):
 
-    # Preferred active text models from your Groq account
+    # Preferred active text models from Groq (ultra-fast, zero-thinking-latency first)
     ACCOUNT_PREFERENCE_ORDER = [
-        "openai/gpt-oss-20b",
         "qwen/qwen3.8-27b",
-        "groq/compound",
-        "groq/compound-mini",
         "allam-2-7b",
         "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
     ]
 
     def __init__(self, config: ModelConfig):
@@ -44,7 +44,7 @@ class GroqProvider(BaseLLMProvider):
             raw_url = f"{raw_url}/openai/v1"
 
         self.base_url = raw_url
-        self.model_name = "openai/gpt-oss-20b"
+        self.model_name = config.model_name or "llama-3.3-70b-versatile"
         self._discovered_models: List[str] = []
 
         self.headers = {
@@ -119,35 +119,38 @@ class GroqProvider(BaseLLMProvider):
             for message in request.messages
         ]
 
-        timeout = httpx.Timeout(self.config.timeout or 30.0)
+        timeout = httpx.Timeout(45.0, connect=5.0)
         endpoint_url = f"{self.base_url}/chat/completions"
 
         last_error = None
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             for candidate in candidate_models:
-                payload = {
-                    "model": candidate,
-                    "messages": messages_payload,
-                    "temperature": getattr(request, "temperature", 0.7),
-                    "max_tokens": getattr(request, "max_tokens", 1024),
-                    "stream": False,
-                }
+                try:
+                    payload = {
+                        "model": candidate,
+                        "messages": messages_payload,
+                        "temperature": getattr(request, "temperature", 0.7),
+                        "max_tokens": getattr(request, "max_tokens", 4096),
+                        "stream": False,
+                    }
 
-                response = await client.post(endpoint_url, headers=self.headers, json=payload)
+                    response = await client.post(endpoint_url, headers=self.headers, json=payload)
 
-                if response.status_code == 200:
-                    self.model_name = candidate
-                    data = response.json()
-                    content = data["choices"][0]["message"]["content"]
-                    return ChatResponse(
-                        content=content,
-                        model=self.model_name,
-                        provider=LLMProvider.GROQ,
-                    )
+                    if response.status_code == 200:
+                        self.model_name = candidate
+                        data = response.json()
+                        content = data["choices"][0]["message"]["content"]
+                        return ChatResponse(
+                            content=content,
+                            model=self.model_name,
+                            provider=LLMProvider.GROQ,
+                        )
 
-                last_error = response.text
-                print(f"[GroqProvider] Model '{candidate}' returned {response.status_code}. Trying next model...")
+                    last_error = response.text
+                    print(f"[GroqProvider] Model '{candidate}' returned {response.status_code}. Trying next model...", flush=True)
+                except Exception as e:
+                    print(f"[GroqProvider] Model '{candidate}' error: {e}. Trying next model...", flush=True)
 
         raise RuntimeError(f"All Groq chat models failed. Last response: {last_error}")
 
@@ -171,7 +174,7 @@ class GroqProvider(BaseLLMProvider):
             for message in request.messages
         ]
 
-        timeout = httpx.Timeout(self.config.timeout or 30.0)
+        timeout = httpx.Timeout(45.0, connect=5.0)
         endpoint_url = f"{self.base_url}/chat/completions"
 
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -180,7 +183,7 @@ class GroqProvider(BaseLLMProvider):
                     "model": candidate,
                     "messages": messages_payload,
                     "temperature": getattr(request, "temperature", 0.7),
-                    "max_tokens": getattr(request, "max_tokens", 1024),
+                    "max_tokens": getattr(request, "max_tokens", 4096),
                     "stream": True,
                 }
 

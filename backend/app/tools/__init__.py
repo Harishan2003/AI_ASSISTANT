@@ -4,6 +4,7 @@ Registers all system, file, process, application, browser, terminal, screenshot,
 """
 
 from app.core.tool_router import tool_router
+from app.tools.tool_registry import tool_registry
 
 # System tools
 from app.tools.system.cpu import CPUStatusTool

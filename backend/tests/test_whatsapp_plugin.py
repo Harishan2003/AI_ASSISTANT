@@ -140,20 +140,20 @@ async def test_whatsapp_natural_language_queries():
     assert "call" in call_ans.lower()
 
     # 13. Group message rejection test
-    assert whatsapp_service._is_group_notification("Project Team", ["Project Team", "Ravi", "Hi all"], "Ravi - Hi all") is True
-    assert whatsapp_service._is_group_notification("College Friends", ["College Friends", "Lithsha: Let's meet"], "Lithsha: Let's meet") is True
+    assert whatsapp_service._is_group_notification("Project Team", ["Project Team", "Member 1", "Hi all"], "Member 1 - Hi all") is True
+    assert whatsapp_service._is_group_notification("Developers Group", ["Developers Group", "Sender: Let's meet"], "Sender: Let's meet") is True
     assert whatsapp_service._is_group_notification("Batch 2024 (15 messages)", ["Batch 2024 (15 messages)", "Update"], "Update") is True
-    assert whatsapp_service._is_group_notification("Amma No: 1", ["Amma No: 1", "What are u doing"], "What are u doing") is False
-    assert whatsapp_service._is_group_notification("Lithsha", ["Lithsha", "Hii"], "Hii") is False
+    assert whatsapp_service._is_group_notification("Contact Option 1", ["Contact Option 1", "What are u doing"], "What are u doing") is False
+    assert whatsapp_service._is_group_notification("Test User Alpha", ["Test User Alpha", "Hii"], "Hii") is False
 
     # 14. Unknown number rejection test
     assert whatsapp_service._is_unknown_number("+91 98765 43210") is True
     assert whatsapp_service._is_unknown_number("+1 (555) 123-4567") is True
     assert whatsapp_service._is_unknown_number("9876543210") is True
     assert whatsapp_service._is_unknown_number("Unknown") is True
-    assert whatsapp_service._is_unknown_number("Amma No: 1") is False
-    assert whatsapp_service._is_unknown_number("Lithsha") is False
-    assert whatsapp_service._is_unknown_number("Harini") is False
+    assert whatsapp_service._is_unknown_number("Contact Option 1") is False
+    assert whatsapp_service._is_unknown_number("Test User Alpha") is False
+    assert whatsapp_service._is_unknown_number("Test User Beta") is False
 
     # 15. Language detection tests
     assert whatsapp_service.detect_language("வணக்கம் Friday, ஹரிஷன் எங்கே?") == "tamil"
@@ -170,15 +170,15 @@ async def test_whatsapp_natural_language_queries():
     # 17. Conversational reply tests
     whatsapp_service.settings["custom_auto_reply_message"] = None
 
-    reply_about_friday = whatsapp_service.generate_auto_reply("Lithsha", "Hey Friday, tell me more about you")
+    reply_about_friday = whatsapp_service.generate_auto_reply("Test User Alpha", "Hey Friday, tell me more about you")
     assert "friday" in reply_about_friday.lower()
     assert len(reply_about_friday) > 20
 
-    reply_tanglish = whatsapp_service.generate_auto_reply("Dinesh", "Enna panra Friday?")
+    reply_tanglish = whatsapp_service.generate_auto_reply("Test Friend", "Enna panra Friday?")
     assert "friday" in reply_tanglish.lower()
     assert len(reply_tanglish) > 15
 
-    reply_urgent = whatsapp_service.generate_auto_reply("Appa", "Call me ASAP, it is an emergency!")
+    reply_urgent = whatsapp_service.generate_auto_reply("Parent Contact", "Call me ASAP, it is an emergency!")
     assert "urgent" in reply_urgent.lower() or "alert" in reply_urgent.lower() or "emergency" in reply_urgent.lower() or "friday" in reply_urgent.lower()
 
     # 18. Media and Attachment handling tests (No vision prompt hallucinations)
@@ -187,36 +187,143 @@ async def test_whatsapp_natural_language_queries():
     assert whatsapp_service.is_media_message("resume.pdf")[0] is True
     assert whatsapp_service.is_media_message("Voice message")[0] is True
 
-    reply_photo = whatsapp_service.generate_auto_reply("Lithsha", "📷 Photo")
+    reply_photo = whatsapp_service.generate_auto_reply("Test User Alpha", "📷 Photo")
     assert "friday" in reply_photo.lower()
     # Confirm Friday NEVER asks for a vision prompt or prompt engineering
     assert "prompt" not in reply_photo.lower()
     assert "describe" not in reply_photo.lower()
 
     # 19. Multi-message context handling tests
-    whatsapp_service.record_sender_message("Alex", "Additional functionality: read the docs and images in this chat\nCreate a plan and respond me now", role="contact")
-    whatsapp_service.record_sender_message("Alex", "Thanks", role="contact")
-    alex_context = whatsapp_service.get_sender_context("Alex")
-    assert "Additional functionality" in alex_context
+    whatsapp_service.record_sender_message("Colleague", "Additional functionality: read the docs and images in this chat\nCreate a plan and respond me now", role="contact")
+    whatsapp_service.record_sender_message("Colleague", "Thanks", role="contact")
+    colleague_context = whatsapp_service.get_sender_context("Colleague")
+    assert "Additional functionality" in colleague_context
 
-    reply_multimsg = whatsapp_service.generate_auto_reply("Alex", "Thanks", context=alex_context)
+    reply_multimsg = whatsapp_service.generate_auto_reply("Colleague", "Thanks", context=colleague_context)
     assert "friday" in reply_multimsg.lower()
     assert len(reply_multimsg) > 15
 
     # 20. Urgent alert tracking and dismissal tests
     whatsapp_service.latest_urgent_alert = {
         "id": 999,
-        "sender": "Lithsha",
+        "sender": "Test User Alpha",
         "message": "Hospital emergency call ASAP!",
         "timestamp": "10:20:00"
     }
     assert whatsapp_service.get_urgent_alert() is not None
-    assert whatsapp_service.get_urgent_alert()["sender"] == "Lithsha"
+    assert whatsapp_service.get_urgent_alert()["sender"] == "Test User Alpha"
 
     dismiss_res = whatsapp_service.dismiss_urgent_alert()
     assert dismiss_res["status"] == "success"
     assert whatsapp_service.get_urgent_alert() is None
 
+    # 21. Monitoring only vs Auto-Reply separation test
+    mon_only_ans = await execute_in_backend("monitor my WhatsApp", session_id="test_wa")
+    assert "active" in mon_only_ans.lower()
+    assert whatsapp_service.settings["enabled"] is True
+    assert whatsapp_service.settings["auto_reply"] is False
+
+    ar_enable_ans = await execute_in_backend("enable auto reply on WhatsApp", session_id="test_wa")
+    assert "active" in ar_enable_ans.lower()
+    assert whatsapp_service.settings["enabled"] is True
+    assert whatsapp_service.settings["auto_reply"] is True
+
+    # 22. Spoken Notification Subscription test
+    sample_contact = "Samantha Cole"
+    notify_ans = await execute_in_backend(f"notify me when I receive message from {sample_contact}", session_id="test_wa")
+    assert sample_contact.lower() in notify_ans.lower()
+    assert whatsapp_service.settings["notify_mode"] == "specific"
+    assert sample_contact.lower() in whatsapp_service.settings["notify_target_contact"].lower()
+
+    # 23. Contextual Follow-Up Reply test
+    whatsapp_service.latest_received_message = {
+        "id": 888,
+        "sender": sample_contact,
+        "message": "Are we meeting today?",
+        "timestamp": 123456789
+    }
+    follow_up_ans = await execute_in_backend("make auto reply to him saying yes at 5pm", session_id="test_wa")
+    assert sample_contact.lower() in follow_up_ans.lower()
+    assert "5pm" in follow_up_ans.lower()
+
+    # 24. Contact Disambiguation test (Completely Dynamic - Zero Hardcoding)
+    # Add two similar contacts to pool dynamically
+    stem_name = "DevContact"
+    cand_1 = f"{stem_name} No: 1"
+    cand_2 = f"{stem_name} No: 2"
+    whatsapp_service._sender_history[cand_1] = []
+    whatsapp_service._sender_history[cand_2] = []
+    disam_ans = await execute_in_backend(f"send message to {stem_name} saying reached safely", session_id="test_disam")
+    assert cand_1.lower() in disam_ans.lower()
+    assert cand_2.lower() in disam_ans.lower()
+
+    # User responds with "first one"
+    pick_ans = await execute_in_backend("first one", session_id="test_disam")
+    assert cand_1.lower() in pick_ans.lower()
+    assert "reached safely" in pick_ans.lower()
+
+    # 25. Qualifier match test (Dynamic base -> qualified match, e.g. "Engineer Dave" -> "Engineer Dave (Robotics Lab)")
+    base_name = "Engineer Dave"
+    qual_contact = f"{base_name} (Robotics Lab)"
+    whatsapp_service._sender_history[qual_contact] = []
+    qual_ans = await execute_in_backend(f"call {base_name}", session_id="test_qual")
+    assert qual_contact.lower() in qual_ans.lower()
+
+    # User confirms with "yes"
+    qual_confirm = await execute_in_backend("yes", session_id="test_qual")
+    assert qual_contact.lower() in qual_confirm.lower()
+
+    # 26. In-Call Speech Synthesis test
+    speak_ans = await execute_in_backend("speak to him saying Harishan will call back in 10 minutes", session_id="test_wa")
+    assert "spoken" in speak_ans.lower()
+    assert "10 minutes" in speak_ans.lower()
+
+    # 27. Smart Mail Drafting with Confirmation Guard
+    mail_ans = await execute_in_backend("send an email to team@company.com regarding weekly status report", session_id="test_mail")
+    assert "subject" in mail_ans.lower()
+    assert "team@company.com" in mail_ans.lower()
+    assert "confirm" in mail_ans.lower() or "check" in mail_ans.lower()
+
+    # User confirms mail
+    mail_confirm = await execute_in_backend("send it", session_id="test_mail")
+    assert "dispatched" in mail_confirm.lower() or "email" in mail_confirm.lower()
+
+    # 28. Send selected file to contact (No prompt asking for path)
+    from unittest.mock import patch
+    with patch("app.services.command_executor.get_selected_desktop_or_explorer_file", return_value="C:/test/sample_doc.pdf"):
+        with patch.object(whatsapp_service, "send_file", return_value={"success": True}) as mock_send_file:
+            test_recipient = "Developer Beta"
+            file_ans = await execute_in_backend(f"send the selected file to {test_recipient}", session_id="test_file")
+            assert "sample_doc.pdf" in file_ans.lower()
+            assert test_recipient.lower() in file_ans.lower()
+            mock_send_file.assert_called_once()
+
+    # 29. Send selected file to contact with "in whatsapp" suffix
+    with patch("app.services.command_executor.get_selected_desktop_or_explorer_file", return_value="C:/test/sample_doc.pdf"):
+        with patch.object(whatsapp_service, "send_file", return_value={"success": True}) as mock_send_file:
+            test_recipient_wa = "Developer Gamma"
+            file_wa_ans = await execute_in_backend(f"send the selected file to {test_recipient_wa} in whatsapp", session_id="test_file_wa")
+            assert "sample_doc.pdf" in file_wa_ans.lower()
+            assert test_recipient_wa.lower() in file_wa_ans.lower()
+            mock_send_file.assert_called_once()
+
+    # 30. Power and System Controls (Testing environment dry-run)
+    lock_ans = await execute_in_backend("lock the computer", session_id="test_pwr")
+    assert "locked" in lock_ans.lower()
+
+    sleep_ans = await execute_in_backend("put pc to sleep", session_id="test_pwr")
+    assert "sleep" in sleep_ans.lower()
+
+    reboot_ans = await execute_in_backend("restart system", session_id="test_pwr")
+    assert "reboot" in reboot_ans.lower() or "restarting" in reboot_ans.lower()
+
+    shutdown_ans = await execute_in_backend("shutdown system", session_id="test_pwr")
+    assert "shutdown" in shutdown_ans.lower()
+
+    cancel_ans = await execute_in_backend("cancel shutdown", session_id="test_pwr")
+    assert "aborted" in cancel_ans.lower()
+
     # Reset
-    whatsapp_service.set_monitoring(enabled=False, custom_auto_reply_message="")
+    whatsapp_service.set_monitoring(enabled=False, custom_auto_reply_message="", notify_mode="all", notify_target_contact=None)
+
 

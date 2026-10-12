@@ -41,6 +41,100 @@
         "domain": "fact",
         "created_at": 1789814513.4833648
       }
+    },
+    {
+      "fact_id": "fact_a026dbac",
+      "fact": "me in a min to cook",
+      "category": "user_preference",
+      "user_id": "Harishan",
+      "created_at": 1790592751.547905,
+      "metadata": {
+        "fact_id": "fact_a026dbac",
+        "category": "user_preference",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1790592751.547905
+      }
+    },
+    {
+      "fact_id": "fact_7c5809e1",
+      "fact": "Learned from link 'https://en.wikipedia.org/wiki/Python_(programming_language' (https://en.wikipedia.org/wiki/Python_(programming_language): Failed to retrieve content from https://en.wikipedia.org/wiki/Python_(programming_language (HTTP Error 404: Not Found).",
+      "category": "learned_links",
+      "user_id": "Harishan",
+      "created_at": 1791817779.8364205,
+      "metadata": {
+        "url": "https://en.wikipedia.org/wiki/Python_(programming_language",
+        "title": "https://en.wikipedia.org/wiki/Python_(programming_language",
+        "fact_id": "fact_7c5809e1",
+        "category": "learned_links",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1791817779.8364205
+      }
+    },
+    {
+      "fact_id": "fact_5563babe",
+      "fact": "Learned from link 'Sigma (film) - Wikipedia' (https://en.wikipedia.org/wiki/Sigma_(film)): Sigma (film) - Wikipedia Jump to content From Wikipedia, the free encyclopedia {{Cite web |date=15 September 2026 |title=Sigma |url=https://cbfcindia.gov.in/cbfcAdmin/search-result.php?recid=Q0EwMzI3MDgyMDI2MDAwMjM= |url-status=live |archive-url=https://web.archive.org/web/20261003084002/https://cbfcindia.gov.in/cbfcAdmin/search-result.php?recid=Q0EwMzI3MDgyMDI2MDAwMjM= |archive-date=3 October 202",
+      "category": "learned_links",
+      "user_id": "Harishan",
+      "created_at": 1791818519.1143813,
+      "metadata": {
+        "url": "https://en.wikipedia.org/wiki/Sigma_(film)",
+        "title": "Sigma (film) - Wikipedia",
+        "fact_id": "fact_5563babe",
+        "category": "learned_links",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1791818519.1143813
+      }
+    },
+    {
+      "fact_id": "fact_88bbe676",
+      "fact": "Learned from link 'Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube' (https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J): Summary: Jailer 2 worldwide in Theatres from Oct 15th!Nelson has a special Q&A session with Superstar Rajinikanth at the grand Jailer 2 Super Show on Sun TV. \ud83d\udd25Watch ...\n\nNelson\u2019s Special Q&A Session with Superstar Rajinikanth | Jailer 2 Super Show | Sun TV - YouTube About Press Copyright Contact us Creators Advertise Developers Terms Privacy Policy & Safety How YouTube works Test new features \u00a9 20",
+      "category": "learned_links",
+      "user_id": "Harishan",
+      "created_at": 1791819602.6170866,
+      "metadata": {
+        "url": "https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J",
+        "title": "Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube",
+        "fact_id": "fact_88bbe676",
+        "category": "learned_links",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1791819602.6170866
+      }
+    },
+    {
+      "fact_id": "fact_a949f652",
+      "fact": "Learned from link 'Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube' (https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J): Summary: Jailer 2 worldwide in Theatres from Oct 15th!Nelson has a special Q&A session with Superstar Rajinikanth at the grand Jailer 2 Super Show on Sun TV. \ud83d\udd25Watch ...\n\nNelson\u2019s Special Q&A Session with Superstar Rajinikanth | Jailer 2 Super Show | Sun TV - YouTube About Press Copyright Contact us Creators Advertise Developers Terms Privacy Policy & Safety How YouTube works Test new features \u00a9 20",
+      "category": "learned_links",
+      "user_id": "Harishan",
+      "created_at": 1791820494.5048854,
+      "metadata": {
+        "url": "https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J",
+        "title": "Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube",
+        "fact_id": "fact_a949f652",
+        "category": "learned_links",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1791820494.5048854
+      }
+    },
+    {
+      "fact_id": "fact_e8810873",
+      "fact": "Learned from link 'Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube' (https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J): Summary: Jailer 2 worldwide in Theatres from Oct 15th!Nelson has a special Q&A session with Superstar Rajinikanth at the grand Jailer 2 Super Show on Sun TV. \ud83d\udd25Watch ...\n\nNelson\u2019s Special Q&A Session with Superstar Rajinikanth | Jailer 2 Super Show | Sun TV - YouTube About Press Copyright Contact us Creators Advertise Developers Terms Privacy Policy & Safety How YouTube works Test new features \u00a9 20",
+      "category": "learned_links",
+      "user_id": "Harishan",
+      "created_at": 1791820633.5045898,
+      "metadata": {
+        "url": "https://youtu.be/v7JFUb1jBkM?si=tnss8gXvc7xra17J",
+        "title": "Nelson\u2019s Special Q&A Session  with Superstar Rajinikanth \ud83d\udd25| Jailer 2 Super Show | Sun TV - YouTube",
+        "fact_id": "fact_e8810873",
+        "category": "learned_links",
+        "user_id": "Harishan",
+        "domain": "fact",
+        "created_at": 1791820633.5045898
+      }
     }
   ]
 }

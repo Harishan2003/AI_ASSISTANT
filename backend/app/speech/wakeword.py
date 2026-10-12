@@ -35,10 +35,15 @@ class WakeWordService:
         )
 
         if wake_words is None:
-
-            wake_words = [
-                "friday",
-            ]
+            wake_words = ["friday"]
+            try:
+                from app.services.command_executor import load_user_profile
+                prof = load_user_profile()
+                ww = prof.get("agent_profile", {}).get("wake_word") or prof.get("wake_word") or prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name")
+                if ww:
+                    wake_words = [ww.lower().strip(), "friday"]
+            except Exception:
+                pass
 
         self.wake_words = [
             word.lower().strip()
@@ -102,7 +107,20 @@ class WakeWordService:
             normalized.split()
         )
 
-        for wake_word in self.wake_words:
+        active_wake_words = set(self.wake_words)
+        try:
+            from app.services.command_executor import load_user_profile
+            prof = load_user_profile()
+            ww = (prof.get("agent_profile", {}).get("wake_word") or prof.get("wake_word") or "").lower().strip()
+            an = (prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or "").lower().strip()
+            if ww:
+                active_wake_words.add(ww)
+            if an:
+                active_wake_words.add(an)
+        except Exception:
+            pass
+
+        for wake_word in active_wake_words:
 
             if wake_word in words:
 
@@ -182,7 +200,7 @@ class WakeWordService:
                     continue
 
                 if not text:
-
+                    time.sleep(0.08)
                     continue
 
                 print(

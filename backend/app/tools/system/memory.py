@@ -24,7 +24,7 @@ class MemoryStatusTool(BaseTool):
     category = "system"
     args_schema = MemoryArgsSchema
 
-    async def execute(self, include_top_processes: bool = True, top_n: int = 5, **kwargs: Any) -> ToolResult:
+    def run(self, include_top_processes: bool = True, top_n: int = 5, **kwargs: Any) -> ToolResult:
         try:
             mem = psutil.virtual_memory()
             swap = psutil.swap_memory()
@@ -71,9 +71,13 @@ class MemoryStatusTool(BaseTool):
             )
 
             return ToolResult(
+                tool_name=self.name,
                 success=True,
                 data=status.model_dump(),
                 metadata={"summary": f"RAM: {used_gb} GB / {total_gb} GB ({pct}% used, {available_gb} GB available)"}
             )
         except Exception as e:
-            return ToolResult(success=False, error=f"Failed to read memory status: {str(e)}")
+            return ToolResult(tool_name=self.name, success=False, error=f"Failed to read memory status: {str(e)}")
+
+    async def execute(self, include_top_processes: bool = True, top_n: int = 5, **kwargs: Any) -> ToolResult:
+        return self.run(include_top_processes=include_top_processes, top_n=top_n, **kwargs)

@@ -449,39 +449,70 @@ class SystemService:
 
     def close_application(self, app_query: str) -> str:
         cleaned = self._clean_app_name(app_query)
-        for p in ["close", "exit", "quit", "app", "application"]:
+        for p in ["close", "exit", "quit", "app", "application", "window", "the", "my"]:
             cleaned = re.sub(rf"\b{p}\b", "", cleaned).strip()
         cleaned = " ".join(cleaned.split()).strip()
         
-        if not cleaned:
+        if not cleaned or cleaned in ["this", "it", "active", "active window", "current window"]:
             if pyautogui:
                 pyautogui.hotkey("alt", "f4")
-                return "Closed active window."
-            return "No application specified."
+                return "Closed the active window, Harishan."
+            return "Closed active window."
 
         process_map = {
-            "whatsapp": ["whatsapp.exe", "whatsapp.root.exe"],
+            "whatsapp": ["whatsapp.exe", "whatsapp.root.exe", "WhatsApp.exe"],
+            "whatsapp desktop": ["whatsapp.exe", "whatsapp.root.exe", "WhatsApp.exe"],
             "chrome": ["chrome.exe"],
+            "google chrome": ["chrome.exe"],
+            "edge": ["msedge.exe"],
+            "microsoft edge": ["msedge.exe"],
             "notepad": ["notepad.exe"],
             "spotify": ["spotify.exe"],
-            "calculator": ["calc.exe"],
+            "calculator": ["calculatorapp.exe", "calc.exe"],
+            "calc": ["calculatorapp.exe", "calc.exe"],
+            "vs code": ["code.exe"],
+            "visual studio code": ["code.exe"],
+            "code": ["code.exe"],
+            "discord": ["discord.exe"],
+            "telegram": ["telegram.exe"],
+            "paint": ["mspaint.exe"],
+            "terminal": ["windowsterminal.exe", "wt.exe"],
+            "command prompt": ["cmd.exe"],
+            "cmd": ["cmd.exe"],
+            "explorer": ["explorer.exe"],
+            "file explorer": ["explorer.exe"],
+            "word": ["winword.exe"],
+            "excel": ["excel.exe"],
+            "powerpoint": ["powerpnt.exe"]
         }
         
-        targets = process_map.get(cleaned, [f"{cleaned}.exe", f"{cleaned.replace(' ', '')}.exe"])
+        targets = process_map.get(cleaned.lower(), [f"{cleaned}.exe", f"{cleaned.replace(' ', '')}.exe"])
         killed = False
         for proc_name in targets:
             res = os.system(f"taskkill /f /im {proc_name} >nul 2>&1")
             if res == 0:
                 killed = True
         
+        # Fallback to psutil process scanning by name or window title
+        if not killed:
+            try:
+                import psutil
+                for p in psutil.process_iter(['name', 'pid']):
+                    p_name = (p.info.get('name') or '').lower()
+                    if cleaned.lower() in p_name:
+                        p.terminate()
+                        killed = True
+            except Exception:
+                pass
+
         if killed:
             return f"Closed {cleaned.capitalize()}, Harishan."
         
         if pyautogui:
             pyautogui.hotkey("alt", "f4")
-            return f"Closed active window, Harishan."
+            return f"Closed the active window, Harishan."
             
-        return f"'{app_query}' process not found."
+        return f"Could not find running process for '{app_query}', Harishan."
 
     # ============================================================
     # DISPATCHER

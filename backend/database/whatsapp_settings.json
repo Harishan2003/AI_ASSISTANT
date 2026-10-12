@@ -1,9 +1,11 @@
 {
-  "enabled": false,
+  "enabled": true,
   "auto_reply": false,
-  "monitoring_active": false,
+  "monitoring_active": true,
   "custom_auto_reply_message": "",
   "auto_reply_template": "dynamic_ai",
-  "replied_count": 51,
-  "last_activity": "2026-09-19 20:13:19"
+  "replied_count": 21,
+  "last_activity": "2026-10-12 21:20:08",
+  "notify_mode": "urgent",
+  "notify_target_contact": null
 }

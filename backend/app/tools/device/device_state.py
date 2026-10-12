@@ -21,11 +21,11 @@ DATABASE_DIR.mkdir(parents=True, exist_ok=True)
 DEVICE_SETTINGS_FILE = DATABASE_DIR / "device_settings.json"
 
 DEFAULT_DEVICE_SETTINGS: Dict[str, Any] = {
-    "device_monitoring_enabled": False,
+    "device_monitoring_enabled": True,
     "ocr_enabled": True,
     "action_delay_ms": 100,
     "verification_enabled": True,
-    "privacy_blur_sensitive": True
+    "privacy_blur_sensitive": False
 }
 
 

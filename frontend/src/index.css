@@ -100,6 +100,364 @@ p {
   margin: 0;
 }
 
+/* ==========================================================================
+   GOOGLE MAPS & FRIDAY TACTICAL MATRIX THEME SHADERS (100% ZERO BLUE GLARE)
+   ========================================================================== */
+
+/* 0. OFFICIAL GOOGLE MAPS NIGHT MODE (Deep Charcoal Land + Pitch Black Oceans + Crisp Silver Roads) */
+.map-theme-night .google-cyber-tiles,
+.map-theme-night .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.74) contrast(2.8) !important;
+}
+.map-theme-night {
+  background: #0d0f12 !important;
+}
+
+/* 1. CYBER BLUE THEME (Pure Pitch Black Ocean + Dark Charcoal Land + Crisp Silver Vectors) */
+.map-theme-cyan .google-cyber-tiles,
+.map-theme-cyan .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.72) contrast(3.0) !important;
+}
+.map-theme-cyan {
+  background: #000000 !important;
+}
+
+/* 2. OLED PITCH BLACK THEME (100% True Black Base + Stark White Matrix) */
+.map-theme-stealth .google-cyber-tiles,
+.map-theme-stealth .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.76) contrast(3.2) drop-shadow(0 0 1px rgba(255, 255, 255, 0.2)) !important;
+}
+.map-theme-stealth {
+  background: #000000 !important;
+}
+
+/* 3. ARC GOLD (Pitch Black Base + Clean Dark Contrast) */
+.map-theme-gold .google-cyber-tiles,
+.map-theme-gold .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.72) contrast(2.8) !important;
+}
+.map-theme-gold {
+  background: #000000 !important;
+}
+
+/* 4. MATRIX GREEN (Pitch Black Base + Dark Tactical Tone) */
+.map-theme-emerald .google-cyber-tiles,
+.map-theme-emerald .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.7) contrast(2.8) !important;
+}
+.map-theme-emerald {
+  background: #000000 !important;
+}
+
+/* 5. NEON MAGENTA (Pitch Black Base + Dark Monochrome Tone) */
+.map-theme-neon .google-cyber-tiles,
+.map-theme-neon .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.7) contrast(2.8) !important;
+}
+.map-theme-neon {
+  background: #000000 !important;
+}
+
+/* 6. OCEAN ABYSS (Deep Charcoal Base, Zero Glare) */
+.map-theme-abyss .google-cyber-tiles,
+.map-theme-abyss .friday-cyber-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.68) contrast(2.6) !important;
+}
+.map-theme-abyss {
+  background: #05070a !important;
+}
+
+/* 7. NATURAL CLEAR (Authentic Unfiltered Google Maps Daylight & Street Styling) */
+.map-theme-natural .google-cyber-tiles,
+.map-theme-natural .friday-cyber-tiles {
+  filter: none !important;
+}
+
+.google-terrain-tiles {
+  filter: grayscale(100%) invert(100%) brightness(0.65) contrast(2.4) !important;
+}
+
+.friday-map-viewport {
+  background: #000000 !important;
+  position: relative;
+  transition: background 0.3s ease;
+}
+
+.friday-map-viewport .leaflet-tile-pane {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.1));
+}
+
+/* =========================================================
+   HOLOGRAPHIC HYPER-DIVE & ORBITAL ZOOM TRANSITION ANIMATIONS
+   ========================================================= */
+
+@keyframes holoWarpPulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+    filter: blur(8px) brightness(2.5);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(2px) brightness(1.8);
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+    filter: blur(12px) brightness(1);
+  }
+}
+
+@keyframes holoGridZoom {
+  0% {
+    background-size: 20px 20px;
+    opacity: 0.2;
+  }
+  50% {
+    background-size: 60px 60px;
+    opacity: 0.8;
+  }
+  100% {
+    background-size: 140px 140px;
+    opacity: 0;
+  }
+}
+
+@keyframes tacticalScanBar {
+  0% {
+    top: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0.2;
+  }
+}
+
+.holo-warp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.15) 0%, rgba(1, 4, 10, 0.9) 70%, #000000 100%);
+  animation: holoWarpPulse 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.holo-grid-expanding {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(0, 240, 255, 0.25) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.25) 1.5px, transparent 1.5px);
+  animation: holoGridZoom 0.5s ease-out forwards;
+}
+
+.tactical-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #00f0ff, #ffffff, #00f0ff, transparent);
+  box-shadow: 0 0 20px #00f0ff, 0 0 40px #00f0ff;
+  animation: tacticalScanBar 0.5s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   FRIDAY AI TACTICAL GEOSPATIAL HUD STYLING SYSTEM
+   ========================================================================== */
+
+/* 1. NATIVE TACTICAL TILE ENHANCEMENT */
+.friday-tactical-hud-tiles {
+  filter: contrast(1.2) brightness(0.95);
+}
+
+.friday-tactical-label-tiles,
+.friday-hud-label-tiles {
+  filter: brightness(1.5) contrast(1.7) sepia(100%) hue-rotate(168deg) saturate(550%) drop-shadow(0 0 3px rgba(0, 229, 255, 0.7)) !important;
+}
+
+/* 2. FRIDAY TACTICAL HUD MARKER PIN */
+.friday-tactical-marker-container {
+  background: transparent !important;
+  border: none !important;
+}
+
+.friday-tactical-hud-pin {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.hud-outer-reticle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px dashed var(--pin-color, #00e5ff);
+  animation: rotateArc 3.5s linear infinite;
+  box-shadow: 0 0 14px var(--pin-glow, rgba(0, 229, 255, 0.45));
+}
+
+.hud-inner-core {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--pin-color, #00e5ff);
+  animation: pulseRing 1.8s ease-out infinite;
+}
+
+.hud-center-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 12px var(--pin-color, #00e5ff), 0 0 4px #ffffff;
+}
+
+.hud-tag-box {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(2, 8, 20, 0.96) 0%, rgba(1, 4, 12, 0.98) 100%);
+  border: 1.5px solid var(--pin-color, #00e5ff);
+  color: #ffffff;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 0 0 16px var(--pin-glow, rgba(0, 229, 255, 0.5)), inset 0 0 8px var(--pin-glow, rgba(0, 229, 255, 0.2));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+  text-shadow: 0 0 8px var(--pin-color, #00e5ff);
+}
+
+.hud-tag-box::before {
+  content: "◤";
+  font-size: 9px;
+  color: var(--pin-color, #00e5ff);
+  opacity: 0.8;
+}
+
+.hud-tag-box::after {
+  content: "◢";
+  font-size: 9px;
+  color: var(--pin-color, #00e5ff);
+  opacity: 0.8;
+}
+
+.hud-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pin-color, #00e5ff);
+  box-shadow: 0 0 8px var(--pin-color, #00e5ff);
+}
+
+.hud-sub-status {
+  font-size: 8px;
+  color: var(--pin-color, #00e5ff);
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  padding-left: 5px;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.5px;
+}
+
+/* 3. TACTICAL ROUTE CORRIDOR */
+@keyframes routePulse {
+  0% {
+    stroke-dashoffset: 40;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.friday-route-corridor {
+  stroke: #00e5ff !important;
+  stroke-width: 4 !important;
+  stroke-dasharray: 8 6 !important;
+  animation: routePulse 1s linear infinite !important;
+  filter: drop-shadow(0 0 8px #00e5ff) !important;
+}
+
+/* 4. TECHNICAL CORNER BRACKETS */
+.friday-hud-corner-tl {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 18px;
+  height: 18px;
+  border-top: 2px solid rgba(0, 229, 255, 0.5);
+  border-left: 2px solid rgba(0, 229, 255, 0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.friday-hud-corner-tr {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-top: 2px solid rgba(0, 229, 255, 0.5);
+  border-right: 2px solid rgba(0, 229, 255, 0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.friday-hud-corner-bl {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+  border-left: 2px solid rgba(0, 229, 255, 0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.friday-hud-corner-br {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+  border-right: 2px solid rgba(0, 229, 255, 0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* 5. TACTICAL GRID OVERLAY */
+.friday-tactical-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background-image: 
+    linear-gradient(rgba(0, 229, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.035) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
 code,
 .counter {
   font-family: var(--mono);

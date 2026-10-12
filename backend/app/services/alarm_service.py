@@ -55,9 +55,17 @@ class AlarmService:
         """Sets a timer for the given number of seconds and runs the countdown in background."""
         alarm_id = f"alarm_{uuid.uuid4().hex[:6]}"
         target_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-        alarm = AlarmItem(alarm_id, label, seconds, target_time)
 
         with self._lock:
+            # Prevent duplicate looping timers if user repeated the command within 15 seconds
+            for old_id, existing in list(self._alarms.items()):
+                if existing.is_active and not existing.cancelled:
+                    if existing.label.lower() == label.lower() and abs((existing.target_time - target_time).total_seconds()) < 15:
+                        logger.info(f"Replacing duplicate timer '{label}' ({old_id}) with new timer ({alarm_id})")
+                        existing.cancelled = True
+                        existing.is_active = False
+
+            alarm = AlarmItem(alarm_id, label, seconds, target_time)
             self._alarms[alarm_id] = alarm
 
         def _runner():
@@ -72,7 +80,11 @@ class AlarmService:
                     break
                 time.sleep(min(sleep_chunk, (target_time - now).total_seconds()))
 
-            alarm.is_active = False
+            with self._lock:
+                if alarm.cancelled or not alarm.is_active:
+                    return
+                alarm.is_active = False
+
             self._fire_alarm(alarm)
 
         t = threading.Thread(target=_runner, daemon=True)
@@ -82,49 +94,95 @@ class AlarmService:
         return alarm.to_dict()
 
     def _fire_alarm(self, alarm: AlarmItem):
-        """Fires the alarm with sound, notification, and speech."""
+        """Fires the alarm with sound, notification, and Friday's Neural Voice Persona."""
         logger.info(f"🔔 ALARM FIRING: '{alarm.label}' at {datetime.datetime.now().strftime('%I:%M %p')}")
 
         # 1. Play audible sound (multi-frequency pulsing chimes)
         if os.name == "nt":
             try:
                 import winsound
-                for _ in range(3):
-                    winsound.Beep(1200, 200)
-                    winsound.Beep(1500, 200)
-                    winsound.Beep(1800, 400)
-                    time.sleep(0.15)
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                for _ in range(2):
+                    winsound.Beep(1200, 150)
+                    winsound.Beep(1500, 150)
+                    winsound.Beep(1800, 250)
+                    time.sleep(0.1)
             except Exception as e:
                 logger.warning(f"winsound beep failed: {e}")
 
-        # 2. Native Windows Toast Notification
+        # 2. Native Windows Toast / Msg Notification
         try:
             if os.name == "nt":
                 import subprocess
                 ps_script = f'''
-                [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+                [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
                 $template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
                 $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template)
                 $text = $xml.GetElementsByTagName("text")
-                $text[0].AppendChild($xml.CreateTextNode("FRIDAY REMINDER: {alarm.label}")) > $null
-                $text[1].AppendChild($xml.CreateTextNode("Scheduled timer completed at {alarm.target_time.strftime('%I:%M %p')}")) > $null
+                $text.Item(0).InnerText = "FRIDAY REMINDER: {alarm.label}"
+                $text.Item(1).InnerText = "Scheduled timer completed at {alarm.target_time.strftime('%I:%M %p')}"
                 $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
                 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Friday AI Assistant").Show($toast)
                 '''
-                subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True, timeout=2.0)
+                subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 
-        # 3. Voice Speech Reminder
-        def _speak_reminder():
+        # 3. Voice Speech Reminder using Friday's Neural Voice Persona & Selected Profile
+        def _speak_neural_reminder():
             try:
-                import win32com.client
-                speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                speaker.Speak(f"Attention Harishan! Your timer is complete. Reminder: {alarm.label}.")
-            except Exception as e:
-                logger.debug(f"Alarm SAPI voice alert fallback: {e}")
+                # Query user profile for persona voice, name, language, and gender
+                from app.services.user_persona_service import user_persona_service
+                from app.services.tts_service import tts_service
+                
+                profile = user_persona_service.get_profile()
+                user_name = profile.get("user_name", "Harishan")
+                comm_style = profile.get("communication_style", {})
+                lang = (comm_style.get("language") or "english").lower()
+                gender = (profile.get("voice_gender") or "female").lower()
 
-        threading.Thread(target=_speak_reminder, daemon=True).start()
+                # Compose localized, persona-aligned alert
+                if lang == "tamil" or re.search(r"[\u0B80-\u0BFF]", alarm.label):
+                    alert_text = f"கவனம் {user_name}! உங்கள் நேர நினைவூட்டல் முடிந்தது: {alarm.label}."
+                elif lang == "tanglish":
+                    alert_text = f"Attention {user_name}! Unga timer complete aaiduchu. Reminder: {alarm.label}."
+                else:
+                    alert_text = f"Attention {user_name}! Your timer is complete. Reminder: {alarm.label}."
+
+                # Synthesize studio-grade neural audio via edge-tts/gTTS
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    audio_bytes = loop.run_until_complete(tts_service.synthesize(alert_text, language=lang, gender=gender))
+                finally:
+                    loop.close()
+
+                if audio_bytes:
+                    import io
+                    import pygame
+                    pygame.mixer.init()
+                    sound_file = io.BytesIO(audio_bytes)
+                    pygame.mixer.music.load(sound_file)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        pygame.time.Clock().tick(10)
+                    return
+            except Exception as e:
+                logger.warning(f"Neural TTS reminder alert fallback notice: {e}")
+
+            # Fallback to Windows native SAPI with COM initialization
+            if os.name == "nt":
+                try:
+                    import pythoncom
+                    pythoncom.CoInitialize()
+                    import win32com.client
+                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                    speaker.Speak(f"Attention Harishan! Your timer is complete. Reminder: {alarm.label}.")
+                    pythoncom.CoUninitialize()
+                except Exception as fallback_err:
+                    logger.warning(f"Alarm SAPI voice alert failed: {fallback_err}")
+
+        threading.Thread(target=_speak_neural_reminder, daemon=True).start()
 
     def list_active_alarms(self) -> List[Dict[str, Any]]:
         """Returns all currently running alarms."""

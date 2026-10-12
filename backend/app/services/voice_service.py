@@ -14,7 +14,9 @@ from app.speech.sensevoice_stt import sensevoice_stt as stt_engine
 
 
 SYSTEM_PROMPT = (
-    "You are Friday, an intelligent, versatile desktop AI assistant. "
+    "You are Friday, an intelligent, versatile Windows 10/11 desktop AI assistant created for Harishan. "
+    "You have full Device Monitoring & Control enabled (screen reading, cursor inspection, window management, file operations, and email automation). "
+    "Never state that you cannot minimize windows, open the desktop, track the mouse cursor, move files, or send emails. "
     "By default, keep spoken answers concise and direct. "
     "However, if the user explicitly asks for a specific length, format, list, or detailed explanation "
     "(e.g., 'in 10 lines', 'explain step by step', 'give 5 points'), follow their requested length and format exactly."
@@ -159,6 +161,16 @@ class VoiceService:
             "exit", "quit", "goodbye", "good bye", "shutdown",
             "close friday", "exit friday", "quit friday", "shutdown friday",
         }
+        try:
+            from app.services.command_executor import load_user_profile
+            prof = load_user_profile()
+            agent = (prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or "").lower().strip()
+            wake = (prof.get("agent_profile", {}).get("wake_word") or prof.get("wake_word") or "").lower().strip()
+            for name in [agent, wake]:
+                if name:
+                    exit_commands.update([f"close {name}", f"exit {name}", f"quit {name}", f"shutdown {name}"])
+        except Exception:
+            pass
         return text in exit_commands
 
     async def process(self, user_message: str) -> str:
@@ -180,7 +192,22 @@ class VoiceService:
 
             self._add_user_message(user_message)
 
-            messages = [ChatMessage(role=MessageRole.SYSTEM, content=SYSTEM_PROMPT)]
+            agent_name = "Friday"
+            try:
+                from app.services.command_executor import load_user_profile
+                prof = load_user_profile()
+                agent_name = prof.get("agent_profile", {}).get("agent_name") or prof.get("agent_name") or "Friday"
+            except Exception:
+                pass
+
+            dynamic_prompt = (
+                f"You are {agent_name}, an intelligent, versatile desktop AI assistant. "
+                "By default, keep spoken answers concise and direct. "
+                "However, if the user explicitly asks for a specific length, format, list, or detailed explanation "
+                "(e.g., 'in 10 lines', 'explain step by step', 'give 5 points'), follow their requested length and format exactly."
+            )
+
+            messages = [ChatMessage(role=MessageRole.SYSTEM, content=dynamic_prompt)]
             for item in self.conversation_history:
                 role = MessageRole.USER if item["role"] == "user" else MessageRole.ASSISTANT
                 messages.append(ChatMessage(role=role, content=item["content"]))

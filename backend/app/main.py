@@ -13,6 +13,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 import psutil
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
@@ -224,6 +232,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+try:
+    from app.api.v1 import api_v1_router, ws_router
+    from app.api.v1.system_api import router as system_router
+    from app.api.v1.voice import tts_get, tts_post, TTSRequest
+    from app.mcp import mount_mcp_to_app
+    app.include_router(api_v1_router)
+    app.include_router(system_router, prefix="/api")
+    app.include_router(ws_router)
+    mount_mcp_to_app(app)
+
+    @app.get("/api/tts")
+    @app.get("/api/v1/tts")
+    async def global_tts_get(text: str, language: Optional[str] = None, gender: Optional[str] = None, voice: Optional[str] = None):
+        return await tts_get(text=text, language=language, gender=gender, voice=voice)
+
+    @app.post("/api/tts")
+    @app.post("/api/v1/tts")
+    async def global_tts_post(req: TTSRequest):
+        return await tts_post(req)
+
+    print("[Backend Core] [OK] System, API v1, Voice/TTS & MCP Routers registered.", flush=True)
+except Exception as e:
+    print(f"[Backend Core Notice] API v1 Router / MCP load: {e}", flush=True)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -238,269 +270,163 @@ async def startup_event():
 
 @app.post("/api/analyze-file")
 @app.post("/api/analyze-file/")
+@app.post("/api/analyze-files")
+@app.post("/api/analyze-files/")
 async def analyze_file_endpoint(
-    file: UploadFile = File(...),
-    prompt: Optional[str] = Form("")
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
+    prompt: Optional[str] = Form(""),
+    session_id: Optional[str] = Form("default"),
+    language: Optional[str] = Form("english")
 ):
-    print(f"\n[HTTP INGEST] >>> File received: {file.filename}", flush=True)
+    incoming = []
+    if files:
+        incoming.extend(files)
+    if file:
+        incoming.append(file)
+
+    if not incoming:
+        return {"response": "No file received for processing.", "status": "error"}
+
+    print(f"\n[HTTP INGEST] >>> {len(incoming)} file(s) received: {[f.filename for f in incoming]}", flush=True)
     try:
-        dest_path = UPLOAD_DIR / file.filename
-        with open(dest_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
+        saved_paths: List[Path] = []
+        file_names: List[str] = []
+        for f in incoming[:6]:
+            dest_path = UPLOAD_DIR / f.filename
+            with open(dest_path, "wb") as buffer:
+                content = await f.read()
+                buffer.write(content)
+            saved_paths.append(dest_path)
+            file_names.append(f.filename)
 
         try:
             from app.services.context_state import context_state
-            context_state.set_selected_file(str(dest_path))
+            context_state.set_selected_file(str(saved_paths[0]))
         except Exception:
             pass
 
-        if document_service is not None:
-            report = await document_service.analyze(dest_path, prompt=prompt or "")
+        # Check if single/primary file is an image with an edit instruction
+        primary_file = saved_paths[0]
+        ext = primary_file.suffix.lower()
+        if ext in [".png", ".jpg", ".jpeg", ".webp", ".bmp"]:
             try:
-                from app.services.context_state import context_state
-                context_state.last_image_analysis = report
-            except Exception:
-                pass
-        else:
-            report = await analyze_document_direct(dest_path, prompt=prompt or "")
+                from app.services.image_editing_service import image_editing_service
+                if prompt and image_editing_service.is_image_edit_instruction(prompt):
+                    edit_res = await image_editing_service.edit_image(
+                        image_input=primary_file,
+                        instruction=prompt,
+                        user_name="Harishan"
+                    )
+                    report = image_editing_service.format_to_markdown_card(edit_res, user_name="Harishan")
+                    if session_id:
+                        try:
+                            from app.services.command_executor import save_chat_turn
+                            save_chat_turn(session_id, "user", prompt)
+                            save_chat_turn(session_id, "assistant", report)
+                        except Exception:
+                            pass
+                    return {
+                        "response": report,
+                        "filename": file_names[0],
+                        "files": file_names,
+                        "count": len(saved_paths),
+                        "status": "success"
+                    }
+            except Exception as edit_err:
+                print(f"[AnalyzeFiles ImageEdit Notice]: {edit_err}", flush=True)
 
-        return {"response": report, "filename": file.filename, "status": "success"}
+        # Check if user prompt is an action / command on the uploaded file (e.g. email, WhatsApp, move, backup)
+        clean_p = (prompt or "").lower().strip()
+        if clean_p and (
+            "@" in clean_p or
+            any(w in clean_p for w in ["mail", "email", "whatsapp", "move", "copy", "backup", "send this", "send file", "share this", "share file", "forward"])
+        ):
+            action_reply = await execute_in_backend(prompt, session_id=session_id or "default", language=language or "english")
+            return {
+                "response": action_reply,
+                "filename": file_names[0],
+                "files": file_names,
+                "count": len(saved_paths),
+                "status": "success"
+            }
+
+        try:
+            from app.services.document_analysis_service import analyze_multiple_documents
+            report = await analyze_multiple_documents(saved_paths, prompt=prompt or "", language=language or "english")
+        except Exception:
+            if document_service is not None:
+                report = await document_service.analyze(saved_paths[0], prompt=prompt or "")
+            else:
+                report = await analyze_document_direct(saved_paths[0], prompt=prompt or "")
+
+        try:
+            from app.services.context_state import context_state
+            context_state.last_image_analysis = report
+        except Exception:
+            pass
+
+        try:
+            from app.services.command_executor import SESSION_DOC_CACHE
+            import app.services.command_executor as ce
+            if session_id:
+                SESSION_DOC_CACHE[session_id] = report
+            ce.LATEST_UPLOADED_DOC_CONTENT = report
+        except Exception:
+            pass
+
+        return {
+            "response": report,
+            "filename": file_names[0] if file_names else "",
+            "files": file_names,
+            "count": len(saved_paths),
+            "status": "success"
+        }
     except Exception as e:
         print(f"[AnalyzeFile Error]: {e}", flush=True)
         return {"response": f"Failed to analyze file: {e}", "status": "error"}
 
 
-def get_greeting_message() -> str:
-    hour = datetime.now().hour
-    period = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
-    current_time = datetime.now().strftime("%I:%M %p")
-    return f"{period} boss. Friday neural interface is online. The time is {current_time}. How can I assist you?"
-
-
-def extract_response_text(res) -> str | None:
-    if res is None:
-        return None
-    if isinstance(res, str) and res.strip():
-        if res.startswith("Acknowledged boss"):
-            return None
-        if res in [
-            "take_screenshot", "take_photo", "open_new_tab", "close_current_tab",
-            "automate_chat", "automate_media", "web_search", "get_current_time",
-            "calculate", "weather", "open_application", "open_folder", "open_file",
-            "open_link", "open_file_explorer", "open_path"
-        ]:
-            return None
-        return res.strip()
-    if isinstance(res, dict):
-        text_candidate = res.get("response") or res.get("message") or res.get("text") or res.get("content")
-        if isinstance(text_candidate, str) and text_candidate.startswith("Acknowledged boss"):
-            return None
-        return text_candidate
-    if hasattr(res, "response"):
-        val = str(res.response)
-        return None if val.startswith("Acknowledged boss") else val
-    if hasattr(res, "text"):
-        val = str(res.text)
-        return None if val.startswith("Acknowledged boss") else val
-    if hasattr(res, "content"):
-        val = str(res.content)
-        return None if val.startswith("Acknowledged boss") else val
-    return None
-
-
-def execute_direct_link(query: str) -> str:
-    clean = query.lower().strip()
-    url_match = re.search(r"https?://[^\s]+", query)
-    if url_match:
-        target_url = url_match.group(0)
-        webbrowser.open(target_url)
-        return f"Opening link: {target_url}"
-
-    target = clean
-    for prefix in ["open link", "open url", "open website", "open", "go to link", "go to", "visit"]:
-        if target.startswith(prefix):
-            target = target[len(prefix):].strip()
-            break
-
-    shortcuts = {
-        "youtube": "https://www.youtube.com",
-        "google": "https://www.google.com",
-        "github": "https://www.github.com",
-        "reddit": "https://www.reddit.com",
-        "twitter": "https://www.x.com",
-        "chatgpt": "https://chatgpt.com",
-        "linkedin": "https://www.linkedin.com",
-    }
-    if target in shortcuts:
-        target_url = shortcuts[target]
-    elif re.search(r"\b[a-zA-Z0-9-]+\.(com|org|net|in|io|ai|co|dev)\b", target):
-        target_url = f"https://{target}" if not target.startswith("http") else target
-    else:
-        target_url = f"https://www.google.com/search?q={urllib.parse.quote_plus(target)}"
-
-    webbrowser.open(target_url)
-    return f"Opening {target_url}"
+@app.get("/api/v1/images/{filename}")
+@app.get("/api/images/{filename}")
+async def serve_image_file_endpoint(filename: str):
+    """Serves generated and edited images directly by filename without multi-megabyte base64 bloat."""
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    import urllib.parse
+    safe_name = os.path.basename(urllib.parse.unquote(filename))
+    
+    here = Path(__file__).resolve()
+    search_dirs = [
+        here.parent.parent / "database" / "generated_images",
+        here.parent.parent / "database" / "edited_images",
+        here.parent.parent / "database" / "face_swaps",
+        here.parent.parent.parent / "database" / "generated_images",
+        here.parent.parent.parent / "database" / "edited_images",
+        here.parent.parent.parent / "database" / "face_swaps",
+        here.parent.parent.parent / "backend" / "database" / "generated_images",
+        here.parent.parent.parent / "backend" / "database" / "edited_images",
+        here.parent.parent.parent / "backend" / "database" / "face_swaps",
+        UPLOAD_DIR,
+    ]
+    for d in search_dirs:
+        candidate = d / safe_name
+        if candidate.exists() and candidate.is_file():
+            media_type = "image/png"
+            if safe_name.lower().endswith((".jpg", ".jpeg")):
+                media_type = "image/jpeg"
+            elif safe_name.lower().endswith(".webp"):
+                media_type = "image/webp"
+            elif safe_name.lower().endswith(".gif"):
+                media_type = "image/gif"
+            return FileResponse(str(candidate), media_type=media_type)
+    raise HTTPException(status_code=404, detail="Image not found")
 
 
 # -------------------------------------------------------------
-# PIPELINE EXECUTION
+# COMMAND & CHAT EXECUTION DELEGATION
 # -------------------------------------------------------------
-async def execute_in_backend(raw_query: str) -> str:
-    query = raw_query.strip()
-    clean = query.lower().strip()
-
-    # 1. Immediate Wake Word & Greeting Handler
-    greetings = ["friday", "hey friday", "hi friday", "hello friday", "hello", "hi", "hlo", "hey", "test"]
-    if not query or clean in greetings:
-        return get_greeting_message()
-
-    print(f"\n[INCOMING QUERY] >>> '{query}'", flush=True)
-
-    # 1.5. Real-Time Alarm, Countdown Timer & Reminder Service (Sound + Notification + Speech)
-    from app.services.alarm_service import parse_alarm_or_reminder_query
-    alarm_parsed = parse_alarm_or_reminder_query(query)
-    if alarm_parsed:
-        return alarm_parsed.get("message", "Alarm configured.")
-
-    # 1.6. Live Screen Understanding & Desktop Context ("What am I seeing?")
-    from app.services.vision_service import is_screen_query, capture_and_describe_screen
-    if is_screen_query(query):
-        return capture_and_describe_screen()
-
-    # 2. Voice Document Analysis Trigger
-    if any(k in clean for k in ["analyze this file", "analyze file", "inspect this file", "examine this file", "read this file"]):
-        try:
-            from app.services.context_state import context_state
-            target_file = context_state.selected_file
-            if target_file and os.path.exists(target_file):
-                if document_service is not None:
-                    res = await document_service.analyze(Path(target_file), prompt=query)
-                    context_state.last_image_analysis = res
-                    return res
-                return await analyze_document_direct(Path(target_file), prompt=query)
-        except Exception as e:
-            print(f"[Context Analysis Error]: {e}", flush=True)
-        return "No file is currently attached or selected for analysis, boss. Please upload or select a file first."
-
-    # 3. Contextual Recall for Follow-up Questions
-    augmented_query = query
-    image_keywords = ["image", "picture", "photo", "drawing", "artwork", "poster", "this", "it", "show", "movie", "franchise"]
-    if any(k in clean for k in image_keywords):
-        try:
-            from app.services.context_state import context_state
-            last_analysis = getattr(context_state, "last_image_analysis", None)
-            if last_analysis:
-                augmented_query = (
-                    f"Context: The user previously uploaded an image that was visually analyzed as follows:\n"
-                    f"\"\"\"\n{last_analysis}\n\"\"\"\n\n"
-                    f"User follow-up question: {query}\n\n"
-                    f"Answer the user's question directly using the visual analysis context above."
-                )
-        except Exception:
-            pass
-
-    # 4. WhatsApp Focus & Search
-    if "whatsapp" in clean and any(k in clean for k in ["search", "find", "message", "to", "for"]):
-        if os.name == "nt":
-            os.system("start whatsapp:")
-        else:
-            os.system("xdg-open whatsapp:// &")
-        await asyncio.sleep(0.35)
-
-    # 5. AgentRouter Execution (Informational Questions Bypass Tools)
-    info_starters = (
-        "who is", "who are", "what is", "what are", "where is", "where are",
-        "why is", "why does", "when is", "when did", "how to", "how do", "how is",
-        "tell me", "explain", "describe", "can you", "who", "what", "which"
-    )
-    is_info_query = any(clean.startswith(q) for q in info_starters) or "?" in clean
-
-    if agent_router is not None and not is_info_query:
-        try:
-            tool_name = agent_router.route(query)
-            if tool_name == "context_execution" and hasattr(agent_router, "_last_context_result"):
-                res = str(agent_router._last_context_result)
-                if not res.startswith("Acknowledged boss"):
-                    return res
-            if tool_name == "open_link":
-                return execute_direct_link(query)
-            if tool_name in ["open_application", "open_folder", "open_file", "open_path", "open_file_explorer"] and system_service is not None:
-                return system_service.execute(tool_name, query)
-        except Exception as e:
-            print(f"[AgentRouter Error]: {e}", flush=True)
-
-    # 6. ChatService Execution
-    if chat_service is not None:
-        for method_name in ["handle_input", "process_message", "chat", "execute"]:
-            if hasattr(chat_service, method_name):
-                try:
-                    fn = getattr(chat_service, method_name)
-                    if inspect.iscoroutinefunction(fn):
-                        raw_res = await asyncio.wait_for(fn(augmented_query), timeout=30.0)
-                    else:
-                        raw_res = await asyncio.to_thread(fn, augmented_query)
-
-                    result_text = extract_response_text(raw_res)
-                    if result_text:
-                        print(f"[ChatService.{method_name} Success] >>> {result_text}", flush=True)
-                        return result_text
-                except asyncio.TimeoutError:
-                    print(f"[ChatService.{method_name}] Request timed out.", flush=True)
-                except Exception as err:
-                    print(f"[ChatService.{method_name} Error]: {err}", flush=True)
-
-    # 7. Direct Groq Provider Fallback
-    groq_key = os.getenv("GROQ_API_KEY", "").strip().strip('"').strip("'")
-    groq_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip().strip('"').strip("'")
-    if groq_key and not groq_key.startswith("gsk_***"):
-        try:
-            from groq import Groq
-            client = Groq(api_key=groq_key)
-            completion = await asyncio.to_thread(
-                client.chat.completions.create,
-                model=groq_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are Friday, an intelligent AI assistant. Answer queries directly, factually, and concisely."
-                    },
-                    {"role": "user", "content": augmented_query}
-                ],
-                temperature=0.2,
-                max_tokens=300
-            )
-            ans = completion.choices[0].message.content.strip()
-            if ans:
-                print(f"[Direct Groq LLM Success] >>> {ans}", flush=True)
-                return ans
-        except Exception as ex:
-            print(f"[Direct Groq Error]: {ex}", flush=True)
-
-    # 8. Local Ollama Fallback
-    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-    ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip().strip('"').strip("'")
-    try:
-        payload = {"model": ollama_model, "prompt": augmented_query, "stream": False}
-        req = urllib.request.Request(
-            f"{ollama_url}/api/generate",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=15.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            local_ans = data.get("response", "").strip()
-            if local_ans:
-                return local_ans
-    except Exception as ex:
-        print(f"[Direct Ollama Error]: {ex}", flush=True)
-
-    # 9. Fallback Check for App Launch
-    if any(clean.startswith(act) for act in ["open ", "launch ", "start "]) and system_service is not None:
-        return system_service.execute("open_application", query)
-
-    return "I am unable to reach the neural engine at this moment, boss."
+from app.services.command_executor import execute_in_backend, get_greeting_message
 
 
 # -------------------------------------------------------------
@@ -532,12 +458,14 @@ manager = ConnectionManager()
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = "default"
+    language: Optional[str] = "english"
 
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     t0 = time.perf_counter()
-    reply = await execute_in_backend(req.message)
+    reply = await execute_in_backend(req.message, session_id=req.session_id or "default")
     took_ms = round((time.perf_counter() - t0) * 1000)
     return {"response": reply, "latency": f"{took_ms}ms"}
 

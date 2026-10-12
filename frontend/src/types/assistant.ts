@@ -22,11 +22,23 @@ export interface ConversationItem {
 export interface UserProfile {
   name: string;
   agent_name: string;
+  wake_word?: string;
   age: string;
   email: string;
   city: string;
   voice_gender?: "female" | "male";
+  language?: string;
   languages?: string[];
+  profile?: {
+    name: string;
+    age?: string;
+    email?: string;
+    city?: string;
+  };
+  agent_profile?: {
+    agent_name: string;
+    wake_word: string;
+  };
 }
 
 export interface GpuInfo {
@@ -92,5 +104,12 @@ export interface DeviceMonitoringSettings {
   action_delay_ms: number;
   verification_enabled: boolean;
   privacy_blur_sensitive: boolean;
+}
+
+export interface DesktopOverlaySettings {
+  enabled: boolean;
+  opacity: number;
+  scale: number;
+  reset_position?: boolean;
 }
 

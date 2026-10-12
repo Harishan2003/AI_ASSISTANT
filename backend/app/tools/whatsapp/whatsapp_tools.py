@@ -123,3 +123,85 @@ class GetWhatsAppStatusTool(BaseTool):
             data=res,
             metadata={"summary": f"WhatsApp Monitoring: {'ENABLED' if active else 'OFF'} | Replied: {count} messages"}
         )
+
+
+# -------------------------------------------------------------
+# 5. SEND WHATSAPP FILE TOOL
+# -------------------------------------------------------------
+class SendFileInput(BaseModel):
+    contact: str = Field(..., description="Name of the contact or group on WhatsApp.")
+    file_path: str = Field(..., description="Absolute path to the file, image, or document to send.")
+
+
+class SendWhatsAppFileTool(BaseTool):
+    name: str = "send_whatsapp_file"
+    description: str = "Sends a file, image, or document from PC to any contact on WhatsApp Desktop."
+    permission_level: PermissionLevel = PermissionLevel.SAFE
+    category: str = "communication"
+    args_schema = SendFileInput
+
+    def run(self, contact: str, file_path: str, **kwargs: Any) -> ToolResult:
+        contact_clean = contact.strip()
+        file_clean = file_path.strip()
+        if not contact_clean or not file_clean:
+            return ToolResult(tool_name=self.name, success=False, error="Both contact and file path are required.")
+
+        res = whatsapp_service.send_file(contact_clean, file_clean)
+        if res.get("success"):
+            return ToolResult(
+                tool_name=self.name,
+                success=True,
+                data=res,
+                metadata={"summary": f"Dispatched file '{res.get('file_name')}' to '{contact_clean}' on WhatsApp."}
+            )
+        return ToolResult(tool_name=self.name, success=False, error=res.get("error", "Failed to send file."))
+
+
+# -------------------------------------------------------------
+# 6. ATTEND WHATSAPP CALL TOOL
+# -------------------------------------------------------------
+class AttendWhatsAppCallTool(BaseTool):
+    name: str = "attend_whatsapp_call"
+    description: str = "Answers/attends an incoming WhatsApp voice or video call."
+    permission_level: PermissionLevel = PermissionLevel.SAFE
+    category: str = "communication"
+
+    def run(self, **kwargs: Any) -> ToolResult:
+        res = whatsapp_service.answer_call()
+        if res.get("success"):
+            return ToolResult(
+                tool_name=self.name,
+                success=True,
+                data=res,
+                metadata={"summary": "Attended incoming WhatsApp call."}
+            )
+        return ToolResult(tool_name=self.name, success=False, error=res.get("error", "Failed to answer call."))
+
+
+# -------------------------------------------------------------
+# 7. SPEAK IN CALL TOOL
+# -------------------------------------------------------------
+class SpeakInCallInput(BaseModel):
+    message: str = Field(..., description="The message text Friday should speak out loud to the person in the call.")
+
+
+class SpeakInCallTool(BaseTool):
+    name: str = "speak_in_call"
+    description: str = "Speaks a message out loud during an active WhatsApp call to communicate with the caller."
+    permission_level: PermissionLevel = PermissionLevel.SAFE
+    category: str = "communication"
+    args_schema = SpeakInCallInput
+
+    def run(self, message: str, **kwargs: Any) -> ToolResult:
+        msg_clean = message.strip()
+        if not msg_clean:
+            return ToolResult(tool_name=self.name, success=False, error="Message is required.")
+
+        res = whatsapp_service.speak_in_call(msg_clean)
+        return ToolResult(
+            tool_name=self.name,
+            success=True,
+            data=res,
+            metadata={"summary": f"Spoken in call: \"{msg_clean}\""}
+        )
+
