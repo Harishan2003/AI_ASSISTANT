@@ -130,12 +130,16 @@ export const OneToOneView: React.FC<OneToOneViewProps> = ({
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span
                 style={{
+                  fontFamily: "var(--font-eurostile, 'Eurostile Extended', 'Michroma', 'Orbitron', sans-serif)",
+                  fontStyle: "italic",
+                  fontStretch: "expanded",
                   fontSize: "13px",
-                  fontWeight: "bold",
-                  letterSpacing: "1.5px",
+                  fontWeight: 800,
+                  letterSpacing: "1.8px",
                   background: "linear-gradient(90deg, #f472b6, #38bdf8)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
+                  textTransform: "uppercase",
                 }}
               >
                 ONE TO ONE // PERSON-TO-PERSON CONVERSATION
@@ -323,21 +327,32 @@ export const OneToOneView: React.FC<OneToOneViewProps> = ({
             >
               <div
                 style={{
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  letterSpacing: "2px",
+                  fontFamily: "var(--font-eurostile, 'Eurostile Extended', 'Michroma', 'Orbitron', sans-serif)",
+                  fontSize: "15px",
+                  fontWeight: 900,
+                  fontStyle: "italic",
+                  fontStretch: "expanded",
+                  letterSpacing: "3px",
                   color: "#ffffff",
-                  textShadow: `0 0 10px ${statusColor}`,
+                  textShadow: `0 0 12px ${statusColor}`,
+                  WebkitTextStroke: "1.5px currentColor",
+                  textTransform: "uppercase",
                 }}
               >
                 {agentName.toUpperCase()}
               </div>
               <div
                 style={{
-                  fontSize: "9px",
+                  fontFamily: "var(--font-eurostile, 'Eurostile Extended', 'Michroma', 'Orbitron', sans-serif)",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                  fontStyle: "italic",
+                  fontStretch: "expanded",
                   color: "#94a3b8",
-                  letterSpacing: "1px",
+                  letterSpacing: "1.8px",
+                  WebkitTextStroke: "0.4px currentColor",
                   marginTop: "4px",
+                  textTransform: "uppercase",
                 }}
               >
                 {isSpeaking ? "SPEAKING" : isMicActive ? "LISTENING" : isThinkingActive ? "THINKING" : "TAP MIC"}

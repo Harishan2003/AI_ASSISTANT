@@ -1,61 +1,5 @@
 [
   {
-    "timestamp": "2026-09-17 13:22:36",
-    "sender": "Dinesh(krct)",
-    "message": "\ud83e\udd1d",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
-    "is_urgent": false,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-17 13:54:14",
-    "sender": "Dinesh(krct)",
-    "message": "\ud83e\udd1d",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
-    "is_urgent": false,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-17 13:56:10",
-    "sender": "Dinesh(krct)",
-    "message": "\ud83e\udd1d",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. MESSAGE",
-    "is_urgent": false,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-17 17:26:11",
-    "sender": "Amma No: 1",
-    "message": "Hai",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi there! How can I assist you today?",
-    "is_urgent": false,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-18 02:16:21",
-    "sender": "Amma No: 1",
-    "message": "Hlo",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hello! I\u2019ve noted your message and will let Harishan know\u2014he\u2019s currently engaged in work and will get back to you shortly.",
-    "is_urgent": false,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-18 02:17:06",
-    "sender": "Amma No: 1",
-    "message": "I need to talk with him urgently",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. I\u2019ve marked your request as HIGH PRIORITY and immediately flagged it for Harishan. He\u2019s currently engaged in work, but I\u2019ll make sure he sees your urgent message right away. He\u2019ll get back to you as soon as possible.",
-    "is_urgent": true,
-    "read": true
-  },
-  {
-    "timestamp": "2026-09-18 02:21:43",
-    "sender": "Amma No: 1",
-    "message": "Ena pannura",
-    "reply": "Hello! I am Friday, Harishan's personal AI Assistant. Hi, naan unga message note pannitu Harishan\u2011kku forward panren. Avan ippo work\u2011la busy irukanga, soon thiruppi varuven.",
-    "is_urgent": false,
-    "read": true
-  },
-  {
     "timestamp": "2026-09-18 02:22:49",
     "sender": "Amma No: 1",
     "message": "Ena pannura",
@@ -795,6 +739,62 @@
     "timestamp": "2026-10-12 22:12:38",
     "sender": "Requesting your permission in Terminal:",
     "message": "Command: dir \"whatsapp refence plugin\"",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-12 23:37:52",
+    "sender": "Amma No: 1",
+    "message": "https://www.instagram.com/reel/DeWmtFrv82P/?psln=MWw3ODljcXhxMmgzdQ==",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 18:00:27",
+    "sender": "Abhishek N S(krct)",
+    "message": "Chri ok, ipo epdium tution povaa thaaneh",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 18:11:14",
+    "sender": "Abhishek N S(krct)",
+    "message": "Solten eh",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 18:11:56",
+    "sender": "Abhishek N S(krct)",
+    "message": "Placement guarantee illa la, athu thaan yosikiren",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 18:12:20",
+    "sender": "Abhishek N S(krct)",
+    "message": "Chri iru",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 22:50:05",
+    "sender": "Abhishek N S(krct)",
+    "message": "\ud83d\ude10",
+    "reply": "",
+    "is_urgent": false,
+    "read": false
+  },
+  {
+    "timestamp": "2026-10-13 23:27:00",
+    "sender": "Abhishek N S(krct)",
+    "message": "\ud83d\ude10",
     "reply": "",
     "is_urgent": false,
     "read": false

@@ -725,8 +725,27 @@ const ChatMessageBubble: React.FC<{
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: "9px", color: "var(--jarvis-cyan)", fontWeight: "bold", textTransform: "uppercase" }}>
-          {m.sender}
+        <div
+          style={{
+            fontSize: m.sender === "user" ? "9px" : "10px",
+            fontFamily: m.sender === "user" ? "'Share Tech Mono', monospace" : "var(--font-eurostile)",
+            fontStyle: m.sender === "user" ? "normal" : "italic",
+            fontStretch: m.sender === "user" ? "normal" : "expanded",
+            color: "var(--jarvis-cyan)",
+            fontWeight: 800,
+            letterSpacing: m.sender === "user" ? "0.8px" : "1.8px",
+            textTransform: "uppercase",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px"
+          }}
+        >
+          {m.sender === "user" ? "USER" : (
+            <>
+              <span style={{ fontSize: "10px", filter: "drop-shadow(0 0 6px var(--jarvis-cyan))" }}>▲</span>
+              <span>{m.sender.toUpperCase()}</span>
+            </>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <button
@@ -1593,7 +1612,7 @@ export const App: React.FC = () => {
       setOneToOneMessages([]);
       setLatestUserTranscript("");
       setLatestFridayResponse("");
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // ---------------------------------------------------------------------------
@@ -1832,11 +1851,11 @@ export const App: React.FC = () => {
 
     recognition.onresult = (event: any) => {
       if (isSpeakingRef.current || isThinkingRef.current || isSendingRef.current) return;
-      
+
       const lastIndex = event.results.length - 1;
       const lastResult = event.results[lastIndex];
       if (!lastResult) return;
-      
+
       // If recognition returns interim hypotheses, ignore non-final interim updates to prevent duplicate triggers
       if (event.results.length > 1 && !lastResult.isFinal) return;
 
@@ -1910,6 +1929,39 @@ export const App: React.FC = () => {
     };
   }, [isThinking, profile.language]);
 
+  const syncVoiceStateToBackend = (
+    newState: "listening" | "idle" | "thinking" | "speaking" | "error",
+    newListening?: boolean,
+    newThinking?: boolean,
+    newSpeaking?: boolean
+  ) => {
+    const lis = newListening !== undefined ? newListening : isListeningDesiredRef.current;
+    const thk = newThinking !== undefined ? newThinking : (newState === "thinking");
+    const spk = newSpeaking !== undefined ? newSpeaking : (newState === "speaking");
+
+    if (activeWsRef.current && activeWsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        activeWsRef.current.send(JSON.stringify({
+          action: "set_voice_state",
+          state: newState,
+          is_listening: lis,
+          is_thinking: thk,
+          is_speaking: spk
+        }));
+      } catch (e) { }
+    }
+    fetch("http://localhost:8000/api/v1/voice/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        state: newState,
+        is_listening: lis,
+        is_thinking: thk,
+        is_speaking: spk
+      })
+    }).catch(() => { });
+  };
+
   const toggleListening = () => {
     /**
      * What does this function do:
@@ -1931,17 +1983,7 @@ export const App: React.FC = () => {
       safeStopRecognition();
     }
 
-    if (activeWsRef.current && activeWsRef.current.readyState === WebSocket.OPEN) {
-      try {
-        activeWsRef.current.send(JSON.stringify({ action: "set_mic", is_listening: nextState }));
-      } catch (e) {}
-    } else {
-      fetch("http://localhost:8000/api/v1/voice/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_listening: nextState, state: nextState ? "listening" : "idle" })
-      }).catch(() => {});
-    }
+    syncVoiceStateToBackend(nextState ? "listening" : "idle", nextState, false, false);
   };
 
   const handleTestVoice = (lang: "english" | "tamil" | "tanglish", gender: "female" | "male") => {
@@ -2090,17 +2132,9 @@ export const App: React.FC = () => {
       activeUtteranceRef.current = null;
       activeAudioRef.current = null;
       isSpeakingRef.current = false;
-      setAssistantState(isListeningDesiredRef.current ? "listening" : "idle");
-      fetch("http://localhost:8000/api/v1/voice/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          state: isListeningDesiredRef.current ? "listening" : "idle",
-          is_speaking: false,
-          is_thinking: false,
-          is_listening: isListeningDesiredRef.current
-        })
-      }).catch(() => {});
+      const nextState = isListeningDesiredRef.current ? "listening" : "idle";
+      setAssistantState(nextState);
+      syncVoiceStateToBackend(nextState, isListeningDesiredRef.current, false, false);
       if (isListeningDesiredRef.current) {
         setTimeout(safeStartRecognition, 300);
       }
@@ -2130,13 +2164,13 @@ export const App: React.FC = () => {
 
       utterance.onstart = () => {
         if (currentSeq !== speechSeqRef.current) {
-          try { window.speechSynthesis.cancel(); } catch (e) {}
+          try { window.speechSynthesis.cancel(); } catch (e) { }
           return;
         }
         safeStopRecognition();
         isSpeakingRef.current = true;
         setAssistantState("speaking");
-        
+
         // Chrome keep-alive pulse: prevents browser engine from pausing long speech after 15 seconds
         if (speechPulseIntervalRef.current) clearInterval(speechPulseIntervalRef.current);
         speechPulseIntervalRef.current = setInterval(() => {
@@ -2146,11 +2180,7 @@ export const App: React.FC = () => {
           }
         }, 10000);
 
-        fetch("http://localhost:8000/api/v1/voice/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: "speaking", is_speaking: true, is_thinking: false })
-        }).catch(() => {});
+        syncVoiceStateToBackend("speaking", undefined, false, true);
       };
 
       utterance.onend = resumeListening;
@@ -2190,7 +2220,7 @@ export const App: React.FC = () => {
       const triggerFastFallback = () => {
         if (isFallbackTriggered || hasEnded || currentSeq !== speechSeqRef.current) return;
         isFallbackTriggered = true;
-        try { ttsAbort.abort(); } catch (e) {}
+        try { ttsAbort.abort(); } catch (e) { }
         fallbackToSpeechSynthesis();
       };
 
@@ -2220,26 +2250,22 @@ export const App: React.FC = () => {
               audio.pause();
               audio.removeAttribute("src");
               audio.load();
-              try { URL.revokeObjectURL(audioUrl); } catch (e) {}
+              try { URL.revokeObjectURL(audioUrl); } catch (e) { }
               return;
             }
             safeStopRecognition();
             isSpeakingRef.current = true;
             setAssistantState("speaking");
-            fetch("http://localhost:8000/api/v1/voice/state", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ state: "speaking", is_speaking: true, is_thinking: false })
-            }).catch(() => {});
+            syncVoiceStateToBackend("speaking", undefined, false, true);
           };
 
           audio.onended = () => {
-            try { URL.revokeObjectURL(audioUrl); } catch (e) {}
+            try { URL.revokeObjectURL(audioUrl); } catch (e) { }
             resumeListening();
           };
 
           audio.onerror = () => {
-            try { URL.revokeObjectURL(audioUrl); } catch (e) {}
+            try { URL.revokeObjectURL(audioUrl); } catch (e) { }
             if (currentSeq === speechSeqRef.current) {
               triggerFastFallback();
             }
@@ -2278,7 +2304,7 @@ export const App: React.FC = () => {
      */
     ++speechSeqRef.current;
     if (activeTtsAbortRef.current) {
-      try { activeTtsAbortRef.current.abort(); } catch (e) {}
+      try { activeTtsAbortRef.current.abort(); } catch (e) { }
       activeTtsAbortRef.current = null;
     }
     if (speechPulseIntervalRef.current) {
@@ -2305,22 +2331,22 @@ export const App: React.FC = () => {
           el.currentTime = 0;
           el.removeAttribute("src");
           el.load();
-        } catch (err) {}
+        } catch (err) { }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     if ("speechSynthesis" in window) {
       try {
         window.speechSynthesis.cancel();
         window.speechSynthesis.pause();
         setTimeout(() => {
-          try { window.speechSynthesis.cancel(); } catch (err) {}
+          try { window.speechSynthesis.cancel(); } catch (err) { }
         }, 50);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (abortControllerRef.current) {
-      try { abortControllerRef.current.abort(); } catch (e) {}
+      try { abortControllerRef.current.abort(); } catch (e) { }
       abortControllerRef.current = null;
     }
 
@@ -2333,7 +2359,7 @@ export const App: React.FC = () => {
     // Synchronize stop state with backend and desktop overlay HUD immediately
     fetch("http://localhost:8000/api/v1/voice/stop", {
       method: "POST"
-    }).catch(() => {});
+    }).catch(() => { });
 
     fetch("http://localhost:8000/api/v1/voice/state", {
       method: "POST",
@@ -2344,7 +2370,7 @@ export const App: React.FC = () => {
         is_thinking: false,
         is_listening: isListeningDesiredRef.current
       })
-    }).catch(() => {});
+    }).catch(() => { });
 
     if (activeWsRef.current && activeWsRef.current.readyState === WebSocket.OPEN) {
       try {
@@ -2354,7 +2380,7 @@ export const App: React.FC = () => {
           is_speaking: false,
           is_thinking: false
         }));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (isListeningDesiredRef.current) {
@@ -2402,7 +2428,7 @@ export const App: React.FC = () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ role: sender === "user" ? "user" : "assistant", content: sanitizedText }),
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       return;
     }
@@ -2436,7 +2462,7 @@ export const App: React.FC = () => {
      */
     if (e) e.preventDefault();
     if (isSendingRef.current || isThinkingRef.current) return;
-    
+
     const clean = (overrideText !== undefined ? overrideText : inputText).trim();
     if (!clean && selectedFiles.length === 0) return;
 
@@ -2445,7 +2471,7 @@ export const App: React.FC = () => {
     // Immediately stop and invalidate any speaking audio or speech synthesis
     ++speechSeqRef.current;
     if (activeTtsAbortRef.current) {
-      try { activeTtsAbortRef.current.abort(); } catch (err) {}
+      try { activeTtsAbortRef.current.abort(); } catch (err) { }
       activeTtsAbortRef.current = null;
     }
     if (activeAudioRef.current) {
@@ -2454,11 +2480,11 @@ export const App: React.FC = () => {
         activeAudioRef.current.currentTime = 0;
         activeAudioRef.current.removeAttribute("src");
         activeAudioRef.current.load();
-      } catch (err) {}
+      } catch (err) { }
       activeAudioRef.current = null;
     }
     if ("speechSynthesis" in window) {
-      try { window.speechSynthesis.cancel(); } catch (err) {}
+      try { window.speechSynthesis.cancel(); } catch (err) { }
     }
     isSpeakingRef.current = false;
 
@@ -2473,6 +2499,7 @@ export const App: React.FC = () => {
     await addMessage("user", messagePayload);
     setAssistantState("thinking");
     setIsThinking(true);
+    syncVoiceStateToBackend("thinking", undefined, true, false);
 
     abortControllerRef.current = new AbortController();
 
@@ -2587,21 +2614,26 @@ export const App: React.FC = () => {
         setAssistantState("speaking");
         isSpeakingRef.current = true;
         safeStopRecognition();
+        syncVoiceStateToBackend("speaking", undefined, false, true);
         speakText(replyText, false);
       } else {
-        setAssistantState(isListeningDesiredRef.current ? "listening" : "idle");
+        const nextState = isListeningDesiredRef.current ? "listening" : "idle";
+        setAssistantState(nextState);
+        syncVoiceStateToBackend(nextState, isListeningDesiredRef.current, false, false);
       }
     } catch (err: any) {
       if (
-        err?.name === "AbortError" || 
-        err?.message?.toLowerCase().includes("aborted") || 
+        err?.name === "AbortError" ||
+        err?.message?.toLowerCase().includes("aborted") ||
         err?.message?.toLowerCase().includes("canceled")
       ) {
         return; // Halted or superseded cleanly
       }
       console.error("[App] Dispatch error:", err);
       setIsThinking(false);
-      setAssistantState(isListeningDesiredRef.current ? "listening" : "idle");
+      const nextState = isListeningDesiredRef.current ? "listening" : "idle";
+      setAssistantState(nextState);
+      syncVoiceStateToBackend("error", false, false, false);
       addMessage("system", "Target connection failure.");
     } finally {
       abortControllerRef.current = null;
@@ -2937,10 +2969,10 @@ export const App: React.FC = () => {
         }}
       >
         {/* Navigation Mode Buttons: HOME, CHAT AGENT & MAP */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div className="jarvis-logo-area" style={{ paddingBottom: 0, borderBottom: "none", marginRight: "4px" }}>
-            <div className="jarvis-logo-icon" style={{ width: "26px", height: "26px", fontSize: "11px" }}>▲</div>
-            <div className="jarvis-logo-text" style={{ fontSize: "0.85rem" }}>{cleanAgentDisplay}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <div className="jarvis-logo-area" style={{ paddingBottom: 0, borderBottom: "none", marginRight: "3px" }}>
+            <div className="jarvis-logo-icon" style={{ width: "22px", height: "22px", fontSize: "9px" }}>▲</div>
+            <div className="jarvis-logo-text" style={{ fontSize: "0.75rem" }}>{cleanAgentDisplay}</div>
           </div>
 
           <button
@@ -2948,18 +2980,26 @@ export const App: React.FC = () => {
               setCurrentView("home");
               setIsMapModalOpen(false);
             }}
+            className="agent-brand-font"
             style={{
+              fontFamily: "var(--font-eurostile)",
+              fontStyle: "italic",
               background: currentView === "home" ? "linear-gradient(135deg, rgba(0, 240, 255, 0.35), rgba(0, 119, 255, 0.2))" : "rgba(1, 4, 10, 0.7)",
               border: currentView === "home" ? "1px solid var(--jarvis-cyan)" : "1px solid rgba(0, 240, 255, 0.25)",
               color: currentView === "home" ? "#00f0ff" : "#94a3b8",
-              borderRadius: "6px",
-              padding: "6px 14px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "1px",
+              borderRadius: "4px",
+              padding: "2.5px 7px",
+              height: "22px",
+              fontSize: "7.5px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
               cursor: "pointer",
-              boxShadow: currentView === "home" ? "0 0 12px rgba(0, 240, 255, 0.4), inset 0 0 8px rgba(0, 240, 255, 0.2)" : "none",
-              transition: "all 0.2s ease"
+              boxShadow: currentView === "home" ? "0 0 8px rgba(0, 240, 255, 0.35), inset 0 0 4px rgba(0, 240, 255, 0.2)" : "none",
+              transition: "all 0.2s ease",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1
             }}
           >
             ⌂ HOME
@@ -2970,18 +3010,26 @@ export const App: React.FC = () => {
               setCurrentView("chat");
               setIsMapModalOpen(false);
             }}
+            className="agent-brand-font"
             style={{
+              fontFamily: "var(--font-eurostile)",
+              fontStyle: "italic",
               background: currentView === "chat" ? "linear-gradient(135deg, rgba(0, 240, 255, 0.35), rgba(0, 119, 255, 0.2))" : "rgba(1, 4, 10, 0.7)",
               border: currentView === "chat" ? "1px solid var(--jarvis-cyan)" : "1px solid rgba(0, 240, 255, 0.25)",
               color: currentView === "chat" ? "#00f0ff" : "#94a3b8",
-              borderRadius: "6px",
-              padding: "6px 14px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "1px",
+              borderRadius: "4px",
+              padding: "2.5px 7px",
+              height: "22px",
+              fontSize: "7.5px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
               cursor: "pointer",
-              boxShadow: currentView === "chat" ? "0 0 12px rgba(0, 240, 255, 0.4), inset 0 0 8px rgba(0, 240, 255, 0.2)" : "none",
-              transition: "all 0.2s ease"
+              boxShadow: currentView === "chat" ? "0 0 8px rgba(0, 240, 255, 0.35), inset 0 0 4px rgba(0, 240, 255, 0.2)" : "none",
+              transition: "all 0.2s ease",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1
             }}
           >
             💬 CHAT AGENT
@@ -2994,18 +3042,26 @@ export const App: React.FC = () => {
               setCurrentView("map");
               setIsMapModalOpen(false);
             }}
+            className="agent-brand-font"
             style={{
+              fontFamily: "var(--font-eurostile)",
+              fontStyle: "italic",
               background: currentView === "map" ? "linear-gradient(135deg, rgba(0, 240, 255, 0.45), rgba(0, 119, 255, 0.3))" : "rgba(1, 4, 10, 0.7)",
               border: currentView === "map" ? "1px solid var(--jarvis-cyan)" : "1px solid rgba(0, 240, 255, 0.35)",
               color: currentView === "map" ? "#00f0ff" : "#38bdf8",
-              borderRadius: "6px",
-              padding: "6px 14px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "1px",
+              borderRadius: "4px",
+              padding: "2.5px 7px",
+              height: "22px",
+              fontSize: "7.5px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
               cursor: "pointer",
-              boxShadow: currentView === "map" ? "0 0 14px rgba(0, 240, 255, 0.5), inset 0 0 8px rgba(0, 240, 255, 0.2)" : "0 0 6px rgba(0, 240, 255, 0.15)",
-              transition: "all 0.2s ease"
+              boxShadow: currentView === "map" ? "0 0 8px rgba(0, 240, 255, 0.45), inset 0 0 4px rgba(0, 240, 255, 0.2)" : "0 0 3px rgba(0, 240, 255, 0.15)",
+              transition: "all 0.2s ease",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1
             }}
             title="Open Real Holographic Map (Street / City / Country)"
           >
@@ -3017,18 +3073,26 @@ export const App: React.FC = () => {
               setCurrentView("system");
               setIsMapModalOpen(false);
             }}
+            className="agent-brand-font"
             style={{
+              fontFamily: "var(--font-eurostile)",
+              fontStyle: "italic",
               background: currentView === "system" ? "linear-gradient(135deg, rgba(0, 240, 255, 0.45), rgba(0, 119, 255, 0.3))" : "rgba(1, 4, 10, 0.7)",
               border: currentView === "system" ? "1px solid var(--jarvis-cyan)" : "1px solid rgba(0, 240, 255, 0.35)",
               color: currentView === "system" ? "#00f0ff" : "#38bdf8",
-              borderRadius: "6px",
-              padding: "6px 14px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "1px",
+              borderRadius: "4px",
+              padding: "2.5px 7px",
+              height: "22px",
+              fontSize: "7.5px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
               cursor: "pointer",
-              boxShadow: currentView === "system" ? "0 0 14px rgba(0, 240, 255, 0.5), inset 0 0 8px rgba(0, 240, 255, 0.2)" : "0 0 6px rgba(0, 240, 255, 0.15)",
-              transition: "all 0.2s ease"
+              boxShadow: currentView === "system" ? "0 0 8px rgba(0, 240, 255, 0.45), inset 0 0 4px rgba(0, 240, 255, 0.2)" : "0 0 3px rgba(0, 240, 255, 0.15)",
+              transition: "all 0.2s ease",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1
             }}
             title="Open Live Full-Screen System Telemetry & Hardware Monitor"
           >
@@ -3041,22 +3105,30 @@ export const App: React.FC = () => {
               setIsMapModalOpen(false);
               fetchOneToOneMessages();
             }}
+            className="agent-brand-font"
             style={{
+              fontFamily: "var(--font-eurostile)",
+              fontStyle: "italic",
               background: currentView === "one-to-one"
                 ? "linear-gradient(135deg, rgba(236, 72, 153, 0.45), rgba(168, 85, 247, 0.35))"
                 : "rgba(1, 4, 10, 0.7)",
               border: currentView === "one-to-one" ? "1px solid #ec4899" : "1px solid rgba(236, 72, 153, 0.35)",
               color: currentView === "one-to-one" ? "#f472b6" : "#e879f9",
-              borderRadius: "6px",
-              padding: "6px 14px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              letterSpacing: "1px",
+              borderRadius: "4px",
+              padding: "2.5px 7px",
+              height: "22px",
+              fontSize: "7.5px",
+              fontWeight: 800,
+              letterSpacing: "0.4px",
               cursor: "pointer",
               boxShadow: currentView === "one-to-one"
-                ? "0 0 14px rgba(236, 72, 153, 0.5), inset 0 0 8px rgba(236, 72, 153, 0.2)"
-                : "0 0 6px rgba(236, 72, 153, 0.15)",
-              transition: "all 0.2s ease"
+                ? "0 0 8px rgba(236, 72, 153, 0.45), inset 0 0 4px rgba(236, 72, 153, 0.2)"
+                : "0 0 3px rgba(236, 72, 153, 0.15)",
+              transition: "all 0.2s ease",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1
             }}
             title="Switch to One to One Direct Person-to-Person Conversation Mode (No Wake Word Required)"
           >
@@ -3267,412 +3339,421 @@ export const App: React.FC = () => {
             onDismiss={() => setUrgentAlert(null)}
           />
 
-        {/* 3. Main Content Views */}
-        {currentView === "one-to-one" ? (
-          /* Full Embedded One to One Direct Person-to-Person Conversation View */
-          <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
-            <OneToOneView
-              onClose={() => setCurrentView("home")}
-              profile={profile}
-              assistantState={assistantState}
-              isThinking={isThinking}
-              isListening={isListening}
-              isGlobalMuted={isGlobalMuted}
-              onSendMessage={(txt) => handleSendMessage(undefined, txt)}
-              onStopExecution={handleStopExecution}
-              onToggleMic={() => {
-                if (isListening) {
-                  safeStopRecognition();
-                  isListeningDesiredRef.current = false;
-                } else {
-                  isListeningDesiredRef.current = true;
-                  safeStartRecognition();
-                }
-              }}
-              messages={oneToOneMessages}
-              onClearHistory={clearOneToOneHistory}
-              latestUserTranscript={latestUserTranscript}
-              latestFridayResponse={latestFridayResponse}
-            />
-          </div>
-        ) : currentView === "map" ? (
-          /* Full Embedded Holographic Cyber Map View */
-          <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
-            <BlueLightMapModal
-              isEmbedded={true}
-              isOpen={true}
-              onClose={() => setCurrentView("home")}
-              selectedRegion={selectedMapRegion}
-              regionTitle={selectedMapTitle}
-              searchTrigger={mapSearchTrigger}
-              routeTrigger={mapRouteTrigger}
-            />
-          </div>
-        ) : currentView === "system" ? (
-          /* Full Embedded Live System Telemetry & Hardware Monitor View */
-          <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
-            <SystemMonitorView onClose={() => setCurrentView("home")} />
-          </div>
-        ) : (
-          /* Dashboard Grid: When HOME or Terminal Minimized -> Full Central Friday Circle; When CHAT -> (If Maximized: 1fr; Else: 1.2fr 460px) */
-          <div
-            style={{
-              flex: 1,
-              display: "grid",
-              gridTemplateColumns: currentView === "chat"
-                ? (isChatMaximized ? "1fr" : (isTerminalCollapsed ? "1fr auto" : "1.2fr 460px"))
-                : "1fr",
-              gridTemplateRows: "1fr",
-              gap: "12px",
-              overflow: "hidden"
-            }}
-          >
-
-          {/* Center Column: Friday Glowing Neural Core Circle (Hidden when Chat is Maximized in Chat View) */}
-          {!(currentView === "chat" && isChatMaximized) && (
+          {/* 3. Main Content Views */}
+          {currentView === "one-to-one" ? (
+            /* Full Embedded One to One Direct Person-to-Person Conversation View */
+            <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
+              <OneToOneView
+                onClose={() => setCurrentView("home")}
+                profile={profile}
+                assistantState={assistantState}
+                isThinking={isThinking}
+                isListening={isListening}
+                isGlobalMuted={isGlobalMuted}
+                onSendMessage={(txt) => handleSendMessage(undefined, txt)}
+                onStopExecution={handleStopExecution}
+                onToggleMic={() => {
+                  if (isListening) {
+                    safeStopRecognition();
+                    isListeningDesiredRef.current = false;
+                  } else {
+                    isListeningDesiredRef.current = true;
+                    safeStartRecognition();
+                  }
+                }}
+                messages={oneToOneMessages}
+                onClearHistory={clearOneToOneHistory}
+                latestUserTranscript={latestUserTranscript}
+                latestFridayResponse={latestFridayResponse}
+              />
+            </div>
+          ) : currentView === "map" ? (
+            /* Full Embedded Holographic Cyber Map View */
+            <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
+              <BlueLightMapModal
+                isEmbedded={true}
+                isOpen={true}
+                onClose={() => setCurrentView("home")}
+                selectedRegion={selectedMapRegion}
+                regionTitle={selectedMapTitle}
+                searchTrigger={mapSearchTrigger}
+                routeTrigger={mapRouteTrigger}
+              />
+            </div>
+          ) : currentView === "system" ? (
+            /* Full Embedded Live System Telemetry & Hardware Monitor View */
+            <div style={{ flex: 1, height: "100%", overflow: "hidden", display: "flex", flexDirection: "column", marginTop: "4px" }}>
+              <SystemMonitorView onClose={() => setCurrentView("home")} />
+            </div>
+          ) : (
+            /* Dashboard Grid: When HOME or Terminal Minimized -> Full Central Friday Circle; When CHAT -> (If Maximized: 1fr; Else: 1.2fr 460px) */
             <div
               style={{
-                position: "relative",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                overflow: "hidden",
-                background: "transparent",
-                border: "none",
-                boxShadow: "none"
+                flex: 1,
+                display: "grid",
+                gridTemplateColumns: currentView === "chat"
+                  ? (isChatMaximized ? "1fr" : (isTerminalCollapsed ? "1fr auto" : "1.2fr 460px"))
+                  : "1fr",
+                gridTemplateRows: "1fr",
+                gap: "12px",
+                overflow: "hidden"
               }}
             >
 
-            {(() => {
-              const isThinkingActive = isThinking || assistantState === "thinking";
-              const isSpeakingActive = assistantState === "speaking";
-              const isMicOn = isListeningDesiredRef.current || isListening || assistantState === "listening";
-              const isFullFridayDisplay = currentView === "home" || (currentView === "chat" && isTerminalCollapsed);
+              {/* Center Column: Friday Glowing Neural Core Circle (Hidden when Chat is Maximized in Chat View) */}
+              {!(currentView === "chat" && isChatMaximized) && (
+                <div
+                  style={{
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100%",
+                    overflow: "hidden",
+                    background: "transparent",
+                    border: "none",
+                    boxShadow: "none"
+                  }}
+                >
 
-              let theme: "yellow" | "red" | "blue" = "red";
-              if (isThinkingActive) {
-                theme = "yellow";
-              } else if (isSpeakingActive || isMicOn) {
-                theme = "blue";
-              } else {
-                theme = "red";
-              }
+                  {(() => {
+                    const isThinkingActive = isThinking || assistantState === "thinking";
+                    const isSpeakingActive = assistantState === "speaking";
+                    const isMicOn = isListeningDesiredRef.current || isListening || assistantState === "listening";
+                    const isFullFridayDisplay = currentView === "home" || (currentView === "chat" && isTerminalCollapsed);
 
-              const ambientGlow = theme === "yellow"
-                ? "radial-gradient(circle at center, rgba(234, 179, 8, 0.22) 0%, rgba(1, 4, 9, 0.4) 70%)"
-                : theme === "blue"
-                  ? (isFullFridayDisplay
-                      ? "radial-gradient(circle at center, rgba(0, 140, 255, 0.15) 0%, rgba(1, 4, 9, 0.35) 70%)"
-                      : "radial-gradient(circle at center, rgba(0, 140, 255, 0.08) 0%, rgba(1, 4, 9, 0.18) 70%)")
-                  : (isFullFridayDisplay
-                      ? "radial-gradient(circle at center, rgba(239, 68, 68, 0.15) 0%, rgba(1, 4, 9, 0.35) 70%)"
-                      : "radial-gradient(circle at center, rgba(239, 68, 68, 0.08) 0%, rgba(1, 4, 9, 0.18) 70%)");
-
-              const sphereBorderColor = theme === "yellow"
-                ? "rgba(250, 204, 21, 0.95)"
-                : theme === "blue"
-                  ? "rgba(0, 240, 255, 0.85)"
-                  : "rgba(248, 113, 113, 0.85)";
-
-              const sphereBoxShadow = theme === "yellow"
-                ? "0 0 50px rgba(250, 204, 21, 0.6), inset 0 0 25px rgba(234, 179, 8, 0.45)"
-                : theme === "blue"
-                  ? (isSpeakingActive
-                    ? "0 0 50px rgba(0, 240, 255, 0.6), inset 0 0 25px rgba(0, 119, 255, 0.45)"
-                    : "0 0 45px rgba(0, 240, 255, 0.45), inset 0 0 25px rgba(0, 119, 255, 0.35)")
-                  : "0 0 50px rgba(239, 68, 68, 0.5), inset 0 0 25px rgba(239, 68, 68, 0.35)";
-
-              const sphereBackground = theme === "yellow"
-                ? "radial-gradient(circle at 50% 50%, rgba(234, 179, 8, 0.28) 0%, rgba(14, 11, 2, 0.96) 75%)"
-                : theme === "blue"
-                  ? "radial-gradient(circle at 50% 50%, rgba(0, 140, 255, 0.22) 0%, rgba(1, 4, 10, 0.95) 75%)"
-                  : "radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.22) 0%, rgba(1, 4, 10, 0.95) 75%)";
-
-              const innerBorderColor = theme === "yellow"
-                ? "rgba(250, 204, 21, 0.55)"
-                : theme === "blue"
-                  ? "rgba(0, 240, 255, 0.45)"
-                  : "rgba(248, 113, 113, 0.6)";
-
-              const textColor = theme === "yellow"
-                ? "#facc15"
-                : theme === "blue"
-                  ? "#00f0ff"
-                  : "#f87171";
-
-              const textShadowColor = theme === "yellow"
-                ? "0 0 16px rgba(250, 204, 21, 0.95)"
-                : theme === "blue"
-                  ? "0 0 16px rgba(0, 240, 255, 0.95)"
-                  : "0 0 16px rgba(239, 68, 68, 0.95)";
-
-              const versionColor = theme === "yellow"
-                ? "#fef08a"
-                : theme === "blue"
-                  ? "#94a3b8"
-                  : "#fca5a5";
-
-              return (
-                <>
-                  {/* Ambient Background Radial Glow */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: ambientGlow,
-                      pointerEvents: "none",
-                      zIndex: 1,
-                      transition: "background 0.3s ease"
-                    }}
-                  />
-                  <canvas ref={centerCanvasRef} width={460} height={460} style={{ position: "absolute", zIndex: 2, pointerEvents: "none" }} />
-
-                  <div
-                    className={`jarvis-sphere-container theme-${theme}`}
-                    onClick={toggleListening}
-                    style={{
-                      zIndex: 2,
-                      transform: isFullFridayDisplay ? "scale(1.22)" : "scale(1.05)",
-                      transition: "all 0.3s ease",
-                      cursor: "pointer",
-                      borderColor: sphereBorderColor,
-                      boxShadow: sphereBoxShadow,
-                      background: sphereBackground
-                    }}
-                    title={
-                      isThinkingActive
-                        ? "⚡ Friday Thinking (Gold/Yellow)"
-                        : isSpeakingActive
-                          ? "🔊 Friday Speaking - Click to Pause Mic"
-                          : isMicOn
-                            ? "🎙️ Mic ON (Blue) - Click to Turn OFF"
-                            : "🔇 Mic OFF (Red) - Click to Turn ON"
+                    let theme: "yellow" | "red" | "blue" = "red";
+                    if (isThinkingActive) {
+                      theme = "yellow";
+                    } else if (isSpeakingActive || isMicOn) {
+                      theme = "blue";
+                    } else {
+                      theme = "red";
                     }
-                  >
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: "14px",
-                        borderRadius: "50%",
-                        border: `1px solid ${innerBorderColor}`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "transparent",
-                        transition: "all 0.3s ease"
-                      }}
-                    >
-                      <div style={{ textAlign: "center" }}>
+
+                    const ambientGlow = theme === "yellow"
+                      ? "radial-gradient(circle at center, rgba(234, 179, 8, 0.22) 0%, rgba(1, 4, 9, 0.4) 70%)"
+                      : theme === "blue"
+                        ? (isFullFridayDisplay
+                          ? "radial-gradient(circle at center, rgba(0, 140, 255, 0.15) 0%, rgba(1, 4, 9, 0.35) 70%)"
+                          : "radial-gradient(circle at center, rgba(0, 140, 255, 0.08) 0%, rgba(1, 4, 9, 0.18) 70%)")
+                        : (isFullFridayDisplay
+                          ? "radial-gradient(circle at center, rgba(239, 68, 68, 0.15) 0%, rgba(1, 4, 9, 0.35) 70%)"
+                          : "radial-gradient(circle at center, rgba(239, 68, 68, 0.08) 0%, rgba(1, 4, 9, 0.18) 70%)");
+
+                    const sphereBorderColor = theme === "yellow"
+                      ? "rgba(250, 204, 21, 0.95)"
+                      : theme === "blue"
+                        ? "rgba(0, 240, 255, 0.85)"
+                        : "rgba(248, 113, 113, 0.85)";
+
+                    const sphereBoxShadow = theme === "yellow"
+                      ? "0 0 50px rgba(250, 204, 21, 0.6), inset 0 0 25px rgba(234, 179, 8, 0.45)"
+                      : theme === "blue"
+                        ? (isSpeakingActive
+                          ? "0 0 50px rgba(0, 240, 255, 0.6), inset 0 0 25px rgba(0, 119, 255, 0.45)"
+                          : "0 0 45px rgba(0, 240, 255, 0.45), inset 0 0 25px rgba(0, 119, 255, 0.35)")
+                        : "0 0 50px rgba(239, 68, 68, 0.5), inset 0 0 25px rgba(239, 68, 68, 0.35)";
+
+                    const sphereBackground = theme === "yellow"
+                      ? "radial-gradient(circle at 50% 50%, rgba(234, 179, 8, 0.28) 0%, rgba(14, 11, 2, 0.96) 75%)"
+                      : theme === "blue"
+                        ? "radial-gradient(circle at 50% 50%, rgba(0, 140, 255, 0.22) 0%, rgba(1, 4, 10, 0.95) 75%)"
+                        : "radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.22) 0%, rgba(1, 4, 10, 0.95) 75%)";
+
+                    const innerBorderColor = theme === "yellow"
+                      ? "rgba(250, 204, 21, 0.55)"
+                      : theme === "blue"
+                        ? "rgba(0, 240, 255, 0.45)"
+                        : "rgba(248, 113, 113, 0.6)";
+
+                    const textColor = theme === "yellow"
+                      ? "#facc15"
+                      : theme === "blue"
+                        ? "#00f0ff"
+                        : "#f87171";
+
+                    const textShadowColor = theme === "yellow"
+                      ? "0 0 16px rgba(250, 204, 21, 0.95)"
+                      : theme === "blue"
+                        ? "0 0 16px rgba(0, 240, 255, 0.95)"
+                        : "0 0 16px rgba(239, 68, 68, 0.95)";
+
+                    const versionColor = theme === "yellow"
+                      ? "#fef08a"
+                      : theme === "blue"
+                        ? "#94a3b8"
+                        : "#fca5a5";
+
+                    return (
+                      <>
+                        {/* Ambient Background Radial Glow */}
                         <div
                           style={{
-                            fontFamily: "'Orbitron', sans-serif",
-                            fontWeight: 900,
-                            letterSpacing: "2px",
-                            color: textColor,
-                            fontSize: "1.45rem",
-                            textShadow: textShadowColor,
-                            transition: "color 0.3s ease, text-shadow 0.3s ease"
+                            position: "absolute",
+                            inset: 0,
+                            background: ambientGlow,
+                            pointerEvents: "none",
+                            zIndex: 1,
+                            transition: "background 0.3s ease"
                           }}
-                        >
-                          {cleanAgentDisplay}
-                        </div>
+                        />
+                        <canvas ref={centerCanvasRef} width={460} height={460} style={{ position: "absolute", zIndex: 2, pointerEvents: "none" }} />
+
                         <div
-                          style={{
-                            fontSize: "10px",
-                            color: textColor,
-                            textTransform: "uppercase",
-                            letterSpacing: "1.5px",
-                            marginTop: "4px",
-                            fontWeight: "bold",
-                            transition: "color 0.3s ease"
-                          }}
-                        >
-                          {isThinkingActive
-                            ? "⚡ THINKING"
-                            : isSpeakingActive
-                              ? "🔊 SPEAKING"
-                              : isMicOn
-                                ? "🎙️ LISTENING"
-                                : "🔇 MIC OFF"}
-                        </div>
-                        <div style={{ fontSize: "9px", color: versionColor, fontFamily: "monospace", marginTop: "2px" }}>v3.0.0</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-          )}
-
-          {/* Right/Full Column: Terminal Stream (Quick Commands & Terminal - Only in CHAT AGENT view) */}
-          {currentView === "chat" && (
-            <div
-              className="jarvis-glass-card jarvis-panel-box"
-              style={{
-                height: isTerminalCollapsed ? "auto" : "100%",
-                alignSelf: isTerminalCollapsed ? "flex-start" : "stretch",
-                minWidth: isTerminalCollapsed ? "280px" : "auto",
-                transition: "all 0.3s ease",
-                display: "flex",
-                flexDirection: "column"
-              }}
-            >
-              <div className="jarvis-panel-title">
-                <span>QUICK COMMANDS & TERMINAL</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <button
-                    onClick={() => setIsChatMaximized((prev) => !prev)}
-                    style={{
-                      background: isChatMaximized ? "rgba(0, 240, 255, 0.35)" : "rgba(0, 119, 255, 0.2)",
-                      border: "1px solid rgba(0, 240, 255, 0.45)",
-                      color: "var(--jarvis-cyan)",
-                      width: "22px",
-                      height: "22px",
-                      borderRadius: "3px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.2s ease"
-                    }}
-                    title={isChatMaximized ? "Restore Friday Neural Core View (Split View)" : "Maximize Chat Box to Full Width (Near Conversations)"}
-                  >
-                    {isChatMaximized ? "🗗" : "⛶"}
-                  </button>
-                  <button
-                    onClick={() => setIsTerminalCollapsed((prev) => !prev)}
-                    style={{
-                      background: "rgba(0, 119, 255, 0.2)",
-                      border: "1px solid rgba(0, 240, 255, 0.4)",
-                      color: "var(--jarvis-cyan)",
-                      width: "22px",
-                      height: "22px",
-                      borderRadius: "3px",
-                      cursor: "pointer",
-                      fontSize: "10px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center"
-                    }}
-                    title={isTerminalCollapsed ? "Expand Terminal" : "Minimize Terminal"}
-                  >
-                    {isTerminalCollapsed ? "▲" : "▼"}
-                  </button>
-                </div>
-              </div>
-
-              {!isTerminalCollapsed && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflow: "hidden" }}>
-                  <div style={{ flex: 1, overflowY: "auto", background: "rgba(1, 4, 10, 0.85)", borderRadius: "4px", border: "1px solid rgba(0, 240, 255, 0.25)", padding: "8px", fontSize: "11px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {messages.map((m) => (
-                      <ChatMessageBubble
-                        key={m.id}
-                        m={m}
-                        isCopied={copiedMessageId === m.id}
-                        onCopy={handleCopyMessage}
-                        onSpeak={speakSpecificMessage}
-                      />
-                    ))}
-
-                    {isThinking && <ProcessingIndicator />}
-                    <div ref={chatEndRef} />
-                  </div>
-
-                  {/* ChatGPT-style Unified Input Card (Textarea Top, Attach/Mic/Exec/Stop Below) */}
-                  <form onSubmit={handleSendMessage} className="chatgpt-input-card">
-                    {/* Top Multiline Textarea */}
-                    <textarea
-                      ref={textareaRef}
-                      rows={1}
-                      placeholder="Message Friday..."
-                      value={inputText}
-                      onChange={handleInputChange}
-                      onKeyDown={handleTextareaKeyDown}
-                      onPaste={handleTextareaPaste}
-                      className="chatgpt-textarea"
-                    />
-
-                    {/* Staged Files Preview */}
-                    {selectedFiles.length > 0 && (
-                      <div className="chatgpt-staged-files">
-                        <span style={{ fontSize: "9px", color: "var(--jarvis-cyan)", fontWeight: "bold", whiteSpace: "nowrap" }}>
-                          STAGED ({selectedFiles.length}/6):
-                        </span>
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="chatgpt-file-pill">
-                            <span style={{ maxWidth: "90px", overflow: "hidden", textOverflow: "ellipsis" }} title={file.name}>
-                              {file.name}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFile(index)}
-                              title="Remove file"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Bottom Toolbar: Attachment on left, Mic, Exec, Stop on right */}
-                    <div className="chatgpt-bottom-toolbar">
-                      <div className="chatgpt-toolbar-left">
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="chatgpt-icon-btn"
-                          title="Upload files (PDF, Code, Images, Text)"
-                        >
-                          <span style={{ fontSize: "16px", lineHeight: 1 }}>+</span>
-                        </button>
-                        <input type="file" multiple ref={fileInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
-                      </div>
-
-                      <div className="chatgpt-toolbar-right">
-                        {/* Microphone Toggle Button */}
-                        <button
-                          type="button"
+                          className={`jarvis-sphere-container theme-${theme}`}
                           onClick={toggleListening}
-                          className={`chatgpt-icon-btn ${isListening ? "active" : "muted"}`}
-                          title={isListening ? "🎙️ Mic Active (Listening) - Click to Mute" : "🔇 Mic Muted - Click to Activate"}
+                          style={{
+                            zIndex: 2,
+                            transform: isFullFridayDisplay ? "scale(1.22)" : "scale(1.05)",
+                            transition: "all 0.3s ease",
+                            cursor: "pointer",
+                            borderColor: sphereBorderColor,
+                            boxShadow: sphereBoxShadow,
+                            background: sphereBackground
+                          }}
+                          title={
+                            isThinkingActive
+                              ? "⚡ Friday Thinking (Gold/Yellow)"
+                              : isSpeakingActive
+                                ? "🔊 Friday Speaking - Click to Pause Mic"
+                                : isMicOn
+                                  ? "🎙️ Mic ON (Blue) - Click to Turn OFF"
+                                  : "🔇 Mic OFF (Red) - Click to Turn ON"
+                          }
                         >
-                          <span style={{ fontSize: "13px" }}>{isListening ? "🎙️" : "🔇"}</span>
-                        </button>
-
-                        {/* Execute / Send Button */}
-                        <button
-                          type="submit"
-                          className="chatgpt-send-btn"
-                          disabled={!inputText.trim() && selectedFiles.length === 0}
-                          title="Execute (Enter)"
-                        >
-                          <span>EXEC</span>
-                          <span style={{ fontSize: "13px", fontWeight: "bold" }}>↑</span>
-                        </button>
-
-                        {/* AUTHENTIC STOP EXECUTION BUTTON */}
-                        <button
-                          type="button"
-                          onClick={handleStopExecution}
-                          className="chatgpt-stop-btn"
-                          title="Halt current execution & silence audio"
-                        >
-                          STOP
-                        </button>
-                      </div>
-                    </div>
-                  </form>
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: "14px",
+                              borderRadius: "50%",
+                              border: `1px solid ${innerBorderColor}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "transparent",
+                              transition: "all 0.3s ease"
+                            }}
+                          >
+                            <div style={{ textAlign: "center" }}>
+                              <div
+                                className="agent-brand-font"
+                                style={{
+                                  fontFamily: "var(--font-eurostile)",
+                                  fontWeight: 900,
+                                  fontStyle: "italic",
+                                  fontStretch: "expanded",
+                                  letterSpacing: "3px",
+                                  color: textColor,
+                                  fontSize: "1.45rem",
+                                  textShadow: textShadowColor,
+                                  WebkitTextStroke: "1.5px currentColor",
+                                  transition: "color 0.3s ease, text-shadow 0.3s ease",
+                                  textTransform: "uppercase"
+                                }}
+                              >
+                                {cleanAgentDisplay}
+                              </div>
+                              <div
+                                className="agent-brand-font"
+                                style={{
+                                  fontFamily: "var(--font-eurostile)",
+                                  fontStyle: "italic",
+                                  fontStretch: "expanded",
+                                  fontSize: "10px",
+                                  color: textColor,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "2px",
+                                  marginTop: "4px",
+                                  fontWeight: 800,
+                                  transition: "color 0.3s ease"
+                                }}
+                              >
+                                {isThinkingActive
+                                  ? "⚡ THINKING"
+                                  : isSpeakingActive
+                                    ? "🔊 SPEAKING"
+                                    : isMicOn
+                                      ? "🎙️ LISTENING"
+                                      : "🔇 MIC OFF"}
+                              </div>
+                              <div style={{ fontSize: "9px", color: versionColor, fontFamily: "monospace", marginTop: "2px" }}>v3.0.0</div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
+
+              {/* Right/Full Column: Terminal Stream (Quick Commands & Terminal - Only in CHAT AGENT view) */}
+              {currentView === "chat" && (
+                <div
+                  className="jarvis-glass-card jarvis-panel-box"
+                  style={{
+                    height: isTerminalCollapsed ? "auto" : "100%",
+                    alignSelf: isTerminalCollapsed ? "flex-start" : "stretch",
+                    minWidth: isTerminalCollapsed ? "280px" : "auto",
+                    transition: "all 0.3s ease",
+                    display: "flex",
+                    flexDirection: "column"
+                  }}
+                >
+                  <div className="jarvis-panel-title">
+                    <span>QUICK COMMANDS & TERMINAL</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <button
+                        onClick={() => setIsChatMaximized((prev) => !prev)}
+                        style={{
+                          background: isChatMaximized ? "rgba(0, 240, 255, 0.35)" : "rgba(0, 119, 255, 0.2)",
+                          border: "1px solid rgba(0, 240, 255, 0.45)",
+                          color: "var(--jarvis-cyan)",
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s ease"
+                        }}
+                        title={isChatMaximized ? "Restore Friday Neural Core View (Split View)" : "Maximize Chat Box to Full Width (Near Conversations)"}
+                      >
+                        {isChatMaximized ? "🗗" : "⛶"}
+                      </button>
+                      <button
+                        onClick={() => setIsTerminalCollapsed((prev) => !prev)}
+                        style={{
+                          background: "rgba(0, 119, 255, 0.2)",
+                          border: "1px solid rgba(0, 240, 255, 0.4)",
+                          color: "var(--jarvis-cyan)",
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          fontSize: "10px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center"
+                        }}
+                        title={isTerminalCollapsed ? "Expand Terminal" : "Minimize Terminal"}
+                      >
+                        {isTerminalCollapsed ? "▲" : "▼"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isTerminalCollapsed && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1, overflow: "hidden" }}>
+                      <div style={{ flex: 1, overflowY: "auto", background: "rgba(1, 4, 10, 0.85)", borderRadius: "4px", border: "1px solid rgba(0, 240, 255, 0.25)", padding: "8px", fontSize: "11px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {messages.map((m) => (
+                          <ChatMessageBubble
+                            key={m.id}
+                            m={m}
+                            isCopied={copiedMessageId === m.id}
+                            onCopy={handleCopyMessage}
+                            onSpeak={speakSpecificMessage}
+                          />
+                        ))}
+
+                        {isThinking && <ProcessingIndicator />}
+                        <div ref={chatEndRef} />
+                      </div>
+
+                      {/* ChatGPT-style Unified Input Card (Textarea Top, Attach/Mic/Exec/Stop Below) */}
+                      <form onSubmit={handleSendMessage} className="chatgpt-input-card">
+                        {/* Top Multiline Textarea */}
+                        <textarea
+                          ref={textareaRef}
+                          rows={1}
+                          placeholder="Message Friday..."
+                          value={inputText}
+                          onChange={handleInputChange}
+                          onKeyDown={handleTextareaKeyDown}
+                          onPaste={handleTextareaPaste}
+                          className="chatgpt-textarea"
+                        />
+
+                        {/* Staged Files Preview */}
+                        {selectedFiles.length > 0 && (
+                          <div className="chatgpt-staged-files">
+                            <span style={{ fontSize: "9px", color: "var(--jarvis-cyan)", fontWeight: "bold", whiteSpace: "nowrap" }}>
+                              STAGED ({selectedFiles.length}/6):
+                            </span>
+                            {selectedFiles.map((file, index) => (
+                              <div key={index} className="chatgpt-file-pill">
+                                <span style={{ maxWidth: "90px", overflow: "hidden", textOverflow: "ellipsis" }} title={file.name}>
+                                  {file.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFile(index)}
+                                  title="Remove file"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Bottom Toolbar: Attachment on left, Mic, Exec, Stop on right */}
+                        <div className="chatgpt-bottom-toolbar">
+                          <div className="chatgpt-toolbar-left">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="chatgpt-icon-btn"
+                              title="Upload files (PDF, Code, Images, Text)"
+                            >
+                              <span style={{ fontSize: "16px", lineHeight: 1 }}>+</span>
+                            </button>
+                            <input type="file" multiple ref={fileInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
+                          </div>
+
+                          <div className="chatgpt-toolbar-right">
+                            {/* Microphone Toggle Button */}
+                            <button
+                              type="button"
+                              onClick={toggleListening}
+                              className={`chatgpt-icon-btn ${isListening ? "active" : "muted"}`}
+                              title={isListening ? "🎙️ Mic Active (Listening) - Click to Mute" : "🔇 Mic Muted - Click to Activate"}
+                            >
+                              <span style={{ fontSize: "13px" }}>{isListening ? "🎙️" : "🔇"}</span>
+                            </button>
+
+                            {/* Execute / Send Button */}
+                            <button
+                              type="submit"
+                              className="chatgpt-send-btn"
+                              disabled={!inputText.trim() && selectedFiles.length === 0}
+                              title="Execute (Enter)"
+                            >
+                              <span>EXEC</span>
+                              <span style={{ fontSize: "13px", fontWeight: "bold" }}>↑</span>
+                            </button>
+
+                            {/* AUTHENTIC STOP EXECUTION BUTTON */}
+                            <button
+                              type="button"
+                              onClick={handleStopExecution}
+                              className="chatgpt-stop-btn"
+                              title="Halt current execution & silence audio"
+                            >
+                              STOP
+                            </button>
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
-
-          </div>
-        )}
         </div>
       </div>
 

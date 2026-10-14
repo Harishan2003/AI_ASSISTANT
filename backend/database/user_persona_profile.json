@@ -4,8 +4,8 @@
   "relationship_status": "Trusted Companion & Personal AI Advisor",
   "rapport_level": 95,
   "care_score": 100,
-  "total_turns_analyzed": 1065,
-  "last_interaction_timestamp": 1791822138.373249,
+  "total_turns_analyzed": 1241,
+  "last_interaction_timestamp": 1791958113.1269875,
   "persona_tone": "warm, friendly, caring, encouraging, deeply intelligent, proactive",
   "communication_style": {
     "preferred_format": "direct, clean, supportive, empathetic",
@@ -21,128 +21,128 @@
     "current_mood": "focused",
     "recent_mood_history": [
       {
-        "timestamp": 1791820627.0892625,
+        "timestamp": 1791913174.7018175,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791820627.0007808,
+        "timestamp": 1791913174.5870192,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791820486.7400558,
+        "timestamp": 1791913072.8167436,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791820486.5789628,
+        "timestamp": 1791913072.7339134,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791819601.2034137,
+        "timestamp": 1791833558.3935213,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791819601.1806552,
+        "timestamp": 1791833558.2088933,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791811420.5150552,
+        "timestamp": 1791833383.8799744,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791811319.3636153,
+        "timestamp": 1791833383.5559165,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791481520.7092366,
+        "timestamp": 1791833219.4277384,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791481010.5171466,
+        "timestamp": 1791833219.1148548,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791480450.26642,
+        "timestamp": 1791832696.1247659,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791480407.9086144,
+        "timestamp": 1791832695.6615922,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791480395.9657774,
+        "timestamp": 1791832600.1889584,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791480393.2087953,
+        "timestamp": 1791832600.1164987,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791480219.4016008,
+        "timestamp": 1791832473.3889296,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791479726.1055164,
+        "timestamp": 1791832473.2878058,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791479708.081246,
+        "timestamp": 1791832362.7182114,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791371055.9477232,
+        "timestamp": 1791832362.4886737,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791370640.1055477,
+        "timestamp": 1791831919.5366561,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       },
       {
-        "timestamp": 1791370620.046211,
+        "timestamp": 1791831919.6314454,
         "mood": "focused",
         "reason": "User alert, refreshed or corrected fatigue state",
         "stress_level": "low"
       }
     ],
     "stress_level": "low",
-    "late_night_sessions_detected": 205,
+    "late_night_sessions_detected": 357,
     "last_wellbeing_checkin": 1791187800.0,
     "active_care_reminders": [
       "Ensure regular hydration during deep focus sessions",
@@ -153,8 +153,8 @@
   "interests_and_domains": [
     {
       "topic": "Tamil",
-      "weight": 51,
-      "last_mentioned": 1791811420.594841
+      "weight": 55,
+      "last_mentioned": 1791827460.5642838
     },
     {
       "topic": "English",

@@ -49,12 +49,15 @@ class GetWeatherTool(BaseTool):
                 city_name = location.get("name", city)
                 country = location.get("country", "")
 
+                from datetime import datetime
                 weather_response = await client.get(
                     "https://api.open-meteo.com/v1/forecast",
                     params={
                         "latitude": latitude,
                         "longitude": longitude,
-                        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+                        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
+                        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum",
+                        "past_days": 2,
                         "timezone": "auto",
                     },
                 )
@@ -62,6 +65,8 @@ class GetWeatherTool(BaseTool):
                 weather_data = weather_response.json()
 
             current = weather_data.get("current", {})
+            daily = weather_data.get("daily", {})
+
             temperature = current.get("temperature_2m")
             humidity = current.get("relative_humidity_2m")
             feels_like = current.get("apparent_temperature")
@@ -69,25 +74,81 @@ class GetWeatherTool(BaseTool):
             weather_code = current.get("weather_code")
             description = _weather_description(weather_code)
 
+            times = daily.get("time", [])
+            daily_rain_prob = daily.get("precipitation_probability_max", [])
+            daily_rain_sum = daily.get("precipitation_sum", [])
+            daily_codes = daily.get("weather_code", [])
+            daily_max_temps = daily.get("temperature_2m_max", [])
+            daily_min_temps = daily.get("temperature_2m_min", [])
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            today_idx = times.index(today_str) if today_str in times else (len(times) // 2 if times else 0)
+            yesterday_idx = max(0, today_idx - 1)
+            tomorrow_idx = min(len(times) - 1, today_idx + 1) if times else 0
+
+            # Yesterday's historical weather
+            yesterday_rain_prob = daily_rain_prob[yesterday_idx] if len(daily_rain_prob) > yesterday_idx else 0
+            yesterday_rain_sum = daily_rain_sum[yesterday_idx] if len(daily_rain_sum) > yesterday_idx else 0.0
+            yesterday_code = daily_codes[yesterday_idx] if len(daily_codes) > yesterday_idx else None
+            yesterday_desc = _weather_description(yesterday_code)
+            yesterday_max = daily_max_temps[yesterday_idx] if len(daily_max_temps) > yesterday_idx else None
+            yesterday_min = daily_min_temps[yesterday_idx] if len(daily_min_temps) > yesterday_idx else None
+
+            # Today's weather
+            today_rain_prob = daily_rain_prob[today_idx] if len(daily_rain_prob) > today_idx else 0
+            today_rain_sum = daily_rain_sum[today_idx] if len(daily_rain_sum) > today_idx else 0.0
+
+            # Tomorrow's forecast
+            tomorrow_rain_prob = daily_rain_prob[tomorrow_idx] if len(daily_rain_prob) > tomorrow_idx else 0
+            tomorrow_rain_sum = daily_rain_sum[tomorrow_idx] if len(daily_rain_sum) > tomorrow_idx else 0.0
+            tomorrow_code = daily_codes[tomorrow_idx] if len(daily_codes) > tomorrow_idx else None
+            tomorrow_desc = _weather_description(tomorrow_code)
+            tomorrow_max = daily_max_temps[tomorrow_idx] if len(daily_max_temps) > tomorrow_idx else None
+            tomorrow_min = daily_min_temps[tomorrow_idx] if len(daily_min_temps) > tomorrow_idx else None
+
+            data_payload = {
+                "city": city_name,
+                "country": country,
+                "condition": description,
+                "temperature_celsius": temperature,
+                "feels_like_celsius": feels_like,
+                "humidity_percent": humidity,
+                "wind_speed_kmh": wind_speed,
+                "precipitation_mm": current.get("precipitation", 0),
+                "yesterday_condition": yesterday_desc,
+                "yesterday_rain_chance": yesterday_rain_prob,
+                "yesterday_rain_sum_mm": yesterday_rain_sum,
+                "yesterday_temp_max": yesterday_max,
+                "yesterday_temp_min": yesterday_min,
+                "today_rain_chance": today_rain_prob,
+                "today_rain_sum_mm": today_rain_sum,
+                "tomorrow_condition": tomorrow_desc,
+                "tomorrow_rain_chance": tomorrow_rain_prob,
+                "tomorrow_rain_sum_mm": tomorrow_rain_sum,
+                "tomorrow_temp_max": tomorrow_max,
+                "tomorrow_temp_min": tomorrow_min,
+            }
+
             return ToolResult(
                 tool_name=self.name,
                 success=True,
-                data={
-                    "city": city_name,
-                    "country": country,
-                    "condition": description,
-                    "temperature_celsius": temperature,
-                    "feels_like_celsius": feels_like,
-                    "humidity_percent": humidity,
-                    "wind_speed_kmh": wind_speed
-                },
+                data=data_payload,
                 metadata={
-                    "summary": f"{description}, {temperature}°C (Feels like {feels_like}°C), {humidity}% humidity in {city_name}, {country}"
+                    "summary": f"{description}, {temperature}°C (Feels like {feels_like}°C), {humidity}% humidity in {city_name}, {country}. Yesterday: {yesterday_desc}, rain: {yesterday_rain_sum}mm. Tomorrow: {tomorrow_desc}, {tomorrow_min}-{tomorrow_max}°C, {tomorrow_rain_prob}% rain."
                 }
             )
 
         except Exception as exc:
             return ToolResult(tool_name=self.name, success=False, error=f"Weather retrieval failed: {str(exc)}")
+
+
+async def get_weather_data(city: str) -> Optional[Dict[str, Any]]:
+    """Helper wrapper to fetch raw structured weather and forecast data."""
+    tool = GetWeatherTool()
+    res = await tool.execute(city=city)
+    if res.success and res.data:
+        return res.data
+    return None
 
 
 async def get_weather(city: str) -> str:
@@ -99,10 +160,11 @@ async def get_weather(city: str) -> str:
         return (
             f"Weather in {d.get('city')}, {d.get('country')}:\n"
             f"Condition: {d.get('condition')}\n"
-            f"Temperature: {d.get('temperature_celsius')}°C\n"
-            f"Feels like: {d.get('feels_like_celsius')}°C\n"
+            f"Temperature: {d.get('temperature_celsius')}°C (Feels like {d.get('feels_like_celsius')}°C)\n"
             f"Humidity: {d.get('humidity_percent')}%\n"
-            f"Wind: {d.get('wind_speed_kmh')} km/h"
+            f"Wind: {d.get('wind_speed_kmh')} km/h\n"
+            f"Today Rain Chance: {d.get('today_rain_chance')}%\n"
+            f"Tomorrow: {d.get('tomorrow_condition')}, {d.get('tomorrow_temp_min')}°C to {d.get('tomorrow_temp_max')}°C (Rain chance: {d.get('tomorrow_rain_chance')}%)"
         )
     return res.error or "Weather service unavailable."
 

@@ -2124,6 +2124,23 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     "is_speaking": global_voice_state["is_speaking"]
                 })
 
+            elif payload.get("action") == "set_voice_state":
+                if "state" in payload:
+                    global_voice_state["state"] = payload["state"]
+                if "is_listening" in payload:
+                    global_voice_state["is_listening"] = bool(payload["is_listening"])
+                if "is_thinking" in payload:
+                    global_voice_state["is_thinking"] = bool(payload["is_thinking"])
+                if "is_speaking" in payload:
+                    global_voice_state["is_speaking"] = bool(payload["is_speaking"])
+                await manager.broadcast({
+                    "type": "state",
+                    "data": global_voice_state["state"],
+                    "is_listening": global_voice_state["is_listening"],
+                    "is_thinking": global_voice_state["is_thinking"],
+                    "is_speaking": global_voice_state["is_speaking"]
+                })
+
             elif payload.get("action") == "toggle_mic":
                 global_voice_state["is_listening"] = not global_voice_state.get("is_listening", True)
                 global_voice_state["state"] = "listening" if global_voice_state["is_listening"] else "idle"

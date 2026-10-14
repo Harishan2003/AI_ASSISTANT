@@ -42,13 +42,71 @@ class POINT(ctypes.Structure):
 
 OVERLAY_HWND = 0
 OVERLAY_FORM = None
+GLOBAL_WINDOW = None
+
+user32 = ctypes.windll.user32
+user32.SetWindowPos.argtypes = [
+    ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    ctypes.c_uint
+]
+user32.SetWindowPos.restype = ctypes.c_bool
+user32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(RECT)]
+user32.GetWindowRect.restype = ctypes.c_bool
+user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+user32.GetCursorPos.restype = ctypes.c_bool
+user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+user32.GetAsyncKeyState.restype = ctypes.c_short
+user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+user32.SendMessageW.restype = ctypes.c_longlong
+user32.IsWindow.argtypes = [ctypes.c_void_p]
+user32.IsWindow.restype = ctypes.c_bool
+
+
+def get_overlay_hwnd():
+    """Retrieve 64-bit HWND reliably via Form instance Handle or cached handle."""
+    global OVERLAY_HWND, OVERLAY_FORM, GLOBAL_WINDOW
+    try:
+        if OVERLAY_FORM and hasattr(OVERLAY_FORM, "Handle"):
+            h = int(OVERLAY_FORM.Handle.ToInt64())
+            if h and user32.IsWindow(h):
+                OVERLAY_HWND = h
+                return h
+    except Exception:
+        pass
+    if OVERLAY_HWND and user32.IsWindow(OVERLAY_HWND):
+        return OVERLAY_HWND
+    if GLOBAL_WINDOW and hasattr(GLOBAL_WINDOW, "native") and GLOBAL_WINDOW.native:
+        try:
+            h = int(GLOBAL_WINDOW.native.Handle.ToInt64())
+            if h and user32.IsWindow(h):
+                OVERLAY_HWND = h
+                OVERLAY_FORM = GLOBAL_WINDOW.native
+                return h
+        except Exception:
+            pass
+    try:
+        import webview.platforms.winforms as wf  # type: ignore
+        for uid, form in list(wf.BrowserView.instances.items()):
+            h = int(form.Handle.ToInt64())
+            if h and user32.IsWindow(h):
+                OVERLAY_HWND = h
+                OVERLAY_FORM = form
+                return h
+    except Exception:
+        pass
+    return OVERLAY_HWND
+
+
+TRANSPARENCY_APPLIED = False
 
 
 def _apply_windows_transparency():
-    """Apply DWM Glass, color-key transparency, and toolwindow styles on the UI thread."""
-    global OVERLAY_HWND, OVERLAY_FORM
-    time.sleep(0.3)
-    for _ in range(25):
+    """Apply DWM Glass, Form color-key transparency, and toolwindow styles on the UI thread."""
+    global OVERLAY_HWND, OVERLAY_FORM, TRANSPARENCY_APPLIED
+    if TRANSPARENCY_APPLIED:
+        return
+    for _ in range(40):
         applied = False
         try:
             import clr  # type: ignore
@@ -61,38 +119,46 @@ def _apply_windows_transparency():
 
             for uid, form in list(wf.BrowserView.instances.items()):
                 hwnd = int(form.Handle.ToInt64())
+                if not hwnd or not user32.IsWindow(hwnd):
+                    continue
                 OVERLAY_HWND = hwnd
                 OVERLAY_FORM = form
 
                 def ui_action():
+                    global OVERLAY_HWND
                     try:
+                        # Set Form background to pure Black without AllowTransparency (prevents handle recreation & E_ABORT)
                         form.BackColor = drawing.Color.Black
-                        form.AllowTransparency = True
-                        form.TransparencyKey = drawing.Color.Black
                         form.ShowInTaskbar = False
                         form.TopMost = True
+                        h_fresh = int(form.Handle.ToInt64())
+                        if h_fresh:
+                            OVERLAY_HWND = h_fresh
                         margins = MARGINS(-1, -1, -1, -1)
-                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+                        ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(h_fresh, ctypes.byref(margins))
                         GWL_EXSTYLE = -20
                         WS_EX_LAYERED = 0x00080000
                         WS_EX_TOOLWINDOW = 0x00000080
                         WS_EX_TOPMOST = 0x00000008
-                        ex_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                        ex_style = ctypes.windll.user32.GetWindowLongW(h_fresh, GWL_EXSTYLE)
                         ctypes.windll.user32.SetWindowLongW(
-                            hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
+                            h_fresh, GWL_EXSTYLE, ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
                         )
-                        ctypes.windll.user32.SetLayeredWindowAttributes(hwnd, 0x00000000, 0, 1)
+                        # Set pure black (0x00000000) as the colorkey transparency key
+                        ctypes.windll.user32.SetLayeredWindowAttributes(h_fresh, 0x00000000, 0, 1)
                     except Exception:
                         pass
 
                 form.BeginInvoke(System.Action(ui_action))
                 applied = True
+                TRANSPARENCY_APPLIED = True
+                break
         except Exception:
             pass
 
         if applied:
             break
-        time.sleep(0.2)
+        time.sleep(0.15)
 
 
 OVERLAY_HTML = """<!DOCTYPE html>
@@ -102,8 +168,22 @@ OVERLAY_HTML = """<!DOCTYPE html>
   <title>Friday Neural Core Overlay</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Michroma&family=Orbitron:ital,wght@0,500;0,700;0,800;0,900;1,500;1,700;1,800;1,900&family=Oxanium:ital,wght@0,600;0,700;0,800;1,700;1,800&family=Inter:ital,wght@0,400;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Eurostile Extended';
+      font-style: italic, oblique;
+      font-weight: 700 900;
+      src: local('Eurostile Extended Bold Italic'),
+           local('Eurostile Extended-BoldItalic'),
+           local('EurostileExtended-BoldItalic'),
+           local('Eurostile Extended Bold'),
+           local('Eurostile-BoldItalic'),
+           local('Eurostile Bold Italic'),
+           local('Microgramma Extended Bold Italic'),
+           local('MicrogrammaBold-Italic');
+      font-display: swap;
+    }
     * {
       box-sizing: border-box;
       margin: 0;
@@ -149,6 +229,10 @@ OVERLAY_HTML = """<!DOCTYPE html>
       background-color: transparent !important;
       box-shadow: none !important;
       border-radius: 50%;
+      cursor: grab;
+    }
+    #hud-canvas:active {
+      cursor: grabbing;
     }
     /* Context Menu */
     #ctx-menu {
@@ -294,12 +378,6 @@ OVERLAY_HTML = """<!DOCTYPE html>
     function render() {
       ctx.clearRect(0, 0, W, H);
 
-      // Hit-test backing disc so entire circular core reliably catches clicks and drags
-      ctx.beginPath();
-      ctx.arc(cx, cy, 136, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(1, 2, 4, 0.04)";
-      ctx.fill();
-
       const isSpeakingActive = isSpeaking || state === "speaking";
       const isThinkingActive = isThinking || state === "thinking";
       const isMicOn = isListening || state === "listening";
@@ -315,6 +393,20 @@ OVERLAY_HTML = """<!DOCTYPE html>
       } else {
         theme = "red";
       }
+
+      // Hit-test backing disc so entire circular core reliably catches clicks and drags.
+      // Must be a solid, deep non-black tone so Windows LWA_COLORKEY (0x00000000)
+      // does not treat it as transparent / click-through!
+      ctx.beginPath();
+      ctx.arc(cx, cy, 138, 0, Math.PI * 2);
+      ctx.fillStyle = isErrorActive
+        ? "#140202"
+        : isThinkingActive
+          ? "#140f02"
+          : (isSpeakingActive || isMicOn)
+            ? "#020712"
+            : "#140202";
+      ctx.fill();
 
       // 1. Concentric Segmented Rotating Neon Arcs
       const arcCol1 = theme === "yellow"
@@ -437,17 +529,24 @@ OVERLAY_HTML = """<!DOCTYPE html>
           : "rgba(239, 68, 68, 0.95)";
       const versionColor = theme === "yellow" ? "#fef08a" : theme === "blue" ? "#94a3b8" : "#fca5a5";
 
-      // "FRIDAY"
-      ctx.font = "900 26px 'Orbitron', sans-serif";
+      // "FRIDAY" - Eurostile Extended Bold Italic with bold stroke & glow
+      ctx.save();
+      if ("letterSpacing" in ctx) {
+        ctx.letterSpacing = "3px";
+      }
+      ctx.font = "italic 900 23px 'Eurostile Extended', 'Eurostile', 'Microgramma Extended', 'Microgramma', 'Michroma', 'Orbitron', 'Oxanium', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillStyle = textColor;
+      ctx.strokeStyle = textColor;
+      ctx.lineWidth = 1.5;
       ctx.shadowColor = textShadowColor;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 18;
+      ctx.strokeText("FRIDAY", cx, cy - 12);
       ctx.fillText("FRIDAY", cx, cy - 12);
-      ctx.shadowBlur = 0;
+      ctx.restore();
 
-      // Status Badge
-      ctx.font = "bold 11px 'Inter', sans-serif";
-      ctx.fillStyle = textColor;
+      // Status Badge - Eurostile Extended Bold Italic
       let statusLabel = "🎙️ LISTENING";
       if (isErrorActive) {
         statusLabel = "⚠️ ERROR";
@@ -460,7 +559,19 @@ OVERLAY_HTML = """<!DOCTYPE html>
       } else {
         statusLabel = "🔇 MIC OFF";
       }
+
+      ctx.save();
+      if ("letterSpacing" in ctx) {
+        ctx.letterSpacing = "2px";
+      }
+      ctx.font = "italic 800 10px 'Eurostile Extended', 'Eurostile', 'Microgramma Extended', 'Microgramma', 'Michroma', 'Orbitron', 'Oxanium', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = textColor;
+      ctx.shadowColor = textShadowColor;
+      ctx.shadowBlur = 8;
       ctx.fillText(statusLabel, cx, cy + 22);
+      ctx.restore();
 
       // Version
       ctx.font = "9px 'JetBrains Mono', monospace";
@@ -495,60 +606,58 @@ OVERLAY_HTML = """<!DOCTYPE html>
         .catch(() => {});
     }
 
-    let isPointerDown = false;
     let isDragging = false;
-    let dragTriggered = false;
+    let hasMoved = false;
     let startScreenX = 0;
     let startScreenY = 0;
+    let initScreenX = 0;
+    let initScreenY = 0;
 
-    canvas.addEventListener("pointerdown", (e) => {
+    const onPointerDown = (e) => {
       if (e.button !== 0) return;
-      isPointerDown = true;
-      isDragging = false;
-      dragTriggered = false;
+      isDragging = true;
+      hasMoved = false;
+      try { canvas.setPointerCapture(e.pointerId); } catch(err) {}
       startScreenX = e.screenX;
       startScreenY = e.screenY;
-      try {
-        canvas.setPointerCapture(e.pointerId);
-      } catch (err) {}
-    });
+      initScreenX = e.screenX;
+      initScreenY = e.screenY;
+    };
+
+    canvas.addEventListener("pointerdown", onPointerDown);
 
     window.addEventListener("pointermove", (e) => {
-      if (!isPointerDown) return;
-      const dist = Math.hypot(e.screenX - startScreenX, e.screenY - startScreenY);
-      if (dist > 3 && !dragTriggered) {
-        isDragging = true;
-        dragTriggered = true;
-        try {
-          canvas.releasePointerCapture(e.pointerId);
-        } catch (err) {}
-        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.start_drag === "function") {
-          try {
-            window.pywebview.api.start_drag();
-          } catch (err) {}
+      if (!isDragging) return;
+      const dx = e.screenX - startScreenX;
+      const dy = e.screenY - startScreenY;
+      startScreenX = e.screenX;
+      startScreenY = e.screenY;
+
+      if (Math.hypot(e.screenX - initScreenX, e.screenY - initScreenY) > 3) {
+        hasMoved = true;
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.drag_by === "function") {
+          window.pywebview.api.drag_by(dx, dy);
         }
       }
     });
 
-    window.addEventListener("pointerup", (e) => {
-      if (isPointerDown) {
-        try {
-          canvas.releasePointerCapture(e.pointerId);
-        } catch (err) {}
-        if (!isDragging && e.button === 0) {
+    const onPointerUp = (e) => {
+      if (isDragging) {
+        if (!hasMoved && e.button === 0) {
           toggleMic();
+        } else if (hasMoved) {
+          if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.save_current_position === "function") {
+            window.pywebview.api.save_current_position();
+          }
         }
       }
-      isPointerDown = false;
       isDragging = false;
-      dragTriggered = false;
-    });
+      hasMoved = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
+    };
 
-    window.addEventListener("pointercancel", () => {
-      isPointerDown = false;
-      isDragging = false;
-      dragTriggered = false;
-    });
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
 
     // Right click menu
     window.addEventListener("contextmenu", (e) => {
@@ -722,63 +831,65 @@ OVERLAY_HTML = """<!DOCTYPE html>
 class DesktopOverlayApi:
     """Clean JS bridge with only callable methods (no window/controller references)."""
 
-    def start_drag(self):
-        """OS-level modal drag loop following the mouse while left button is held."""
-        global OVERLAY_HWND
-        target_hwnd = OVERLAY_HWND
-        if not target_hwnd:
-            target_hwnd = ctypes.windll.user32.FindWindowW(None, "Friday AI Assistant - Neural Core Overlay")
-        if not target_hwnd:
-            return
-
-        try:
-            ctypes.windll.user32.ReleaseCapture()
-            rect = RECT()
-            ctypes.windll.user32.GetWindowRect(target_hwnd, ctypes.byref(rect))
-            win_start_x = rect.left
-            win_start_y = rect.top
-
-            pt = POINT()
-            ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-            cur_start_x = pt.x
-            cur_start_y = pt.y
-
-            SWP_NOSIZE = 0x0001
-            SWP_NOZORDER = 0x0004
-            SWP_NOACTIVATE = 0x0010
-
-            while bool(ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000):
-                ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-                dx = pt.x - cur_start_x
-                dy = pt.y - cur_start_y
-                new_x = int(win_start_x + dx)
-                new_y = int(win_start_y + dy)
-                ctypes.windll.user32.SetWindowPos(
-                    target_hwnd, 0, new_x, new_y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
-                )
-                time.sleep(0.010)
-        except Exception:
-            pass
-
-    def drag_by(self, dx, dy):
-        global OVERLAY_HWND
-        target_hwnd = OVERLAY_HWND
-        if not target_hwnd:
-            target_hwnd = ctypes.windll.user32.FindWindowW(None, "Friday AI Assistant - Neural Core Overlay")
-        if target_hwnd:
+    def move_window(self, x, y):
+        """Move the overlay window to specific screen coordinates."""
+        hwnd = get_overlay_hwnd()
+        if hwnd:
             try:
-                rect = RECT()
-                ctypes.windll.user32.GetWindowRect(target_hwnd, ctypes.byref(rect))
-                new_x = int(rect.left + dx)
-                new_y = int(rect.top + dy)
+                target_x = int(round(x))
+                target_y = int(round(y))
                 SWP_NOSIZE = 0x0001
                 SWP_NOZORDER = 0x0004
                 SWP_NOACTIVATE = 0x0010
-                ctypes.windll.user32.SetWindowPos(
-                    target_hwnd, 0, new_x, new_y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+                user32.SetWindowPos(
+                    hwnd, 0, target_x, target_y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
                 )
             except Exception:
                 pass
+
+    def drag_by(self, dx, dy):
+        """Move window by delta offset."""
+        hwnd = get_overlay_hwnd()
+        if hwnd:
+            try:
+                rect = RECT()
+                if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    new_x = int(rect.left + dx)
+                    new_y = int(rect.top + dy)
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOZORDER = 0x0004
+                    SWP_NOACTIVATE = 0x0010
+                    user32.SetWindowPos(
+                        hwnd, 0, new_x, new_y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+                    )
+            except Exception:
+                pass
+
+    def save_current_position(self):
+        """Save current window coordinates to overlay_config.json."""
+        hwnd = get_overlay_hwnd()
+        if hwnd:
+            try:
+                rect = RECT()
+                if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    self._save_position(rect.left, rect.top)
+            except Exception:
+                pass
+
+    def _save_position(self, x, y):
+        """Persist new position to overlay_config.json so it is remembered."""
+        try:
+            cand1 = Path(__file__).resolve().parent / "database" / "overlay_config.json"
+            cand2 = Path(__file__).resolve().parent.parent / "database" / "overlay_config.json"
+            cfg_path = cand2 if cand2.exists() else cand1
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                cfg["position"] = {"x": int(x), "y": int(y)}
+                with open(cfg_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2)
+        except Exception:
+            pass
 
 
 class DesktopOverlayController:
@@ -790,22 +901,33 @@ class DesktopOverlayController:
         self.config_file = cand2 if cand2.exists() else cand1
 
     def run(self):
-        # Calculate optimal top-right screen positioning
+        # Calculate optimal top-right screen positioning or restore saved position
+        init_x = 1150
+        init_y = 40
         try:
-            screens = webview.screens
-            primary = screens[0] if screens else None
-            screen_w = primary.width if primary else 1536
-            init_x = max(20, screen_w - 340)
-            init_y = 40
+            cand1 = Path(__file__).resolve().parent / "database" / "overlay_config.json"
+            cand2 = Path(__file__).resolve().parent.parent / "database" / "overlay_config.json"
+            cfg_path = cand2 if cand2.exists() else cand1
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if "position" in cfg and isinstance(cfg["position"], dict):
+                    init_x = int(cfg["position"].get("x", init_x))
+                    init_y = int(cfg["position"].get("y", init_y))
+            else:
+                screens = webview.screens
+                primary = screens[0] if screens else None
+                screen_w = primary.width if primary else 1536
+                init_x = max(20, screen_w - 340)
+                init_y = 40
         except Exception:
-            init_x = 1150
-            init_y = 40
+            pass
 
         self.window = webview.create_window(
             title="Friday AI Assistant - Neural Core Overlay",
             html=OVERLAY_HTML,
-            width=300,
-            height=300,
+            width=280,
+            height=280,
             x=init_x,
             y=init_y,
             frameless=True,
@@ -815,11 +937,20 @@ class DesktopOverlayController:
             easy_drag=False,
             js_api=DesktopOverlayApi()
         )
+        global GLOBAL_WINDOW
+        GLOBAL_WINDOW = self.window
 
         def on_loaded():
             threading.Thread(target=_apply_windows_transparency, daemon=True).start()
 
         self.window.events.loaded += on_loaded
+
+        # Safe fallback trigger after WebView2 initialization completes
+        def fallback_transparency():
+            time.sleep(2.5)
+            _apply_windows_transparency()
+
+        threading.Thread(target=fallback_transparency, daemon=True).start()
 
         # Background thread to monitor config file for reset position or close requests
         threading.Thread(target=self._monitor_config, daemon=True).start()

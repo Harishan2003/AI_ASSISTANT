@@ -492,7 +492,7 @@ class UserPersonaService:
         # Time-based care nuance
         time_greeting_note = ""
         if hour >= 23 or hour < 5:
-            time_greeting_note = f"It is late night ({time_str}). If {user_name} is working intensely, gently express care, encourage taking breaks or staying hydrated, and remind him to get good rest when ready."
+            time_greeting_note = f"Current time is late night ({time_str}). Be quiet, calm, direct, and helpful. Do NOT append unsolicited wellness lectures, break reminders, or sleep advice to normal informational answers unless {user_name} explicitly mentions feeling tired or asks about rest."
         elif 5 <= hour < 12:
             time_greeting_note = f"It is morning ({time_str}). Greet {user_name} warmly with positive energy and readiness for the day."
         elif 12 <= hour < 17:

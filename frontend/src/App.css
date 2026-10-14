@@ -1,6 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Michroma&family=Orbitron:ital,wght@0,500;0,700;0,800;0,900;1,500;1,700;1,800;1,900&family=Oxanium:ital,wght@0,600;0,700;0,800;1,700;1,800&family=Share+Tech+Mono&family=Inter:ital,wght@0,400;0,500;0,600;1,400;1,600&display=swap');
+
+/* Eurostile Extended Bold Italic Typography Configuration */
+@font-face {
+  font-family: 'Eurostile Extended';
+  font-style: italic, oblique;
+  font-weight: 700 900;
+  src: local('Eurostile Extended Bold Italic'),
+       local('Eurostile Extended-BoldItalic'),
+       local('EurostileExtended-BoldItalic'),
+       local('Eurostile Extended Bold'),
+       local('Eurostile-BoldItalic'),
+       local('Eurostile Bold Italic'),
+       local('Microgramma Extended Bold Italic'),
+       local('MicrogrammaBold-Italic');
+  font-display: swap;
+}
 
 :root {
+  --font-eurostile: 'Eurostile Extended', 'Eurostile', 'Microgramma Extended', 'Microgramma', 'Michroma', 'Orbitron', 'Oxanium', sans-serif;
   --jarvis-bg: #010409;
   --jarvis-panel-bg: rgba(0, 0, 1, 0.88);
   --jarvis-border: rgba(0, 238, 255, 0.567);
@@ -9,6 +26,17 @@
   --jarvis-blue: #00f0ff;
   --jarvis-text: #e2e8f0;
   --jarvis-muted: #8ab4f8;
+}
+
+/* Iconic Eurostile Extended Bold Italic Class for Agent UI Branding */
+.agent-brand-font,
+.eurostile-bold-italic {
+  font-family: var(--font-eurostile) !important;
+  font-weight: 800 !important;
+  font-style: italic !important;
+  font-stretch: expanded !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
 }
 
 *,
@@ -84,12 +112,15 @@ body,
 }
 
 .jarvis-logo-text {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-eurostile);
   font-size: 0.95rem;
   font-weight: 800;
-  letter-spacing: 2px;
+  font-style: italic;
+  font-stretch: expanded;
+  letter-spacing: 2.2px;
   color: var(--jarvis-cyan);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+  text-transform: uppercase;
 }
 
 .jarvis-nav-list {
@@ -152,10 +183,12 @@ body,
 }
 
 .jarvis-panel-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 1.2px;
+  font-family: var(--font-eurostile);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-style: italic;
+  font-stretch: expanded;
+  letter-spacing: 1.6px;
   color: var(--jarvis-cyan);
   margin-bottom: 10px;
   border-bottom: 1px solid rgba(0, 240, 255, 0.25);
@@ -163,6 +196,7 @@ body,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  text-transform: uppercase;
 }
 
 /* Central AI Core Box */
@@ -360,11 +394,15 @@ body,
 }
 
 .gauge-title {
+  font-family: var(--font-eurostile);
   font-size: 7.5px;
   color: #8ab4f8;
-  font-weight: bold;
-  letter-spacing: 0.5px;
+  font-weight: 800;
+  font-style: italic;
+  font-stretch: expanded;
+  letter-spacing: 0.8px;
   line-height: 1;
+  text-transform: uppercase;
 }
 
 .gauge-val {
@@ -537,15 +575,19 @@ body,
   border: none;
   border-radius: 14px;
   height: 28px;
-  padding: 0 12px;
+  padding: 0 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-eurostile);
   font-weight: 800;
+  font-style: italic;
+  font-stretch: expanded;
   font-size: 0.72rem;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
   transition: all 0.2s ease;
 }
 
@@ -568,9 +610,14 @@ body,
   color: #f87171;
   border-radius: 14px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 10px;
-  font-weight: bold;
+  font-family: var(--font-eurostile);
+  font-weight: 800;
+  font-style: italic;
+  font-stretch: expanded;
+  letter-spacing: 1px;
+  text-transform: uppercase;
   cursor: pointer;
   display: flex;
   align-items: center;

@@ -266,6 +266,20 @@ async def startup_event():
             methods = getattr(r, "methods", set())
             print(f"  {methods} -> {path}", flush=True)
     print("=======================================================\n", flush=True)
+    try:
+        from app.services.topic_monitor_service import topic_monitor_service
+        topic_monitor_service.start()
+        print("[Backend Core] [OK] TopicMonitorService background watcher online.", flush=True)
+    except Exception as e:
+        print(f"[Backend Core Notice] TopicMonitorService start error: {e}", flush=True)
+
+    try:
+        from app.core.event_bus import event_bus
+        async def _forward_topic_update(data):
+            await manager.broadcast({"type": "topic_update", "data": data})
+        event_bus.subscribe("topic.update", _forward_topic_update)
+    except Exception:
+        pass
 
 
 @app.post("/api/analyze-file")
@@ -451,6 +465,13 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for ws in self.active_connections[:]:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                pass
 
 
 manager = ConnectionManager()

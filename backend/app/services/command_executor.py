@@ -842,6 +842,20 @@ def resolve_conversational_query(query: str, history: List[Dict[str, Any]]) -> s
         base_clean = re.sub(r'\([^\)]+\)', '', query).strip()
         return f"{explicit_entity} {base_clean}".strip()
 
+    reaction_patterns = [
+        r"^what the (?:fuck|hell)", r"^wtf", r"^wait what", r"^are you serious",
+        r"^are you crazy", r"^no way", r"^what\?", r"^huh\?", r"^what do you mean",
+        r"^seriously\?", r"^how come\?"
+    ]
+    if any(re.search(p, clean_lower) for p in reaction_patterns) and history:
+        prior_turns = [
+            t for t in history
+            if not (t.get("role") == "user" and t.get("message", "").strip().lower() == clean_lower)
+        ]
+        if prior_turns:
+            last_bot_msg = prior_turns[-1].get("message", "")[:200]
+            return f"{query} (Note: User is reacting to your previous statement: \"{last_bot_msg}\". Address what you said, do not define the words.)"
+
     pronouns_and_followups = [
         r"\bhim\b", r"\bher\b", r"\bhis\b", r"\bhe\b", r"\bshe\b", r"\bit\b", r"\bits\b",
         r"\bthem\b", r"\bthey\b", r"\bthis\b", r"\bthat\b", r"\bthese\b", r"\bthose\b",
@@ -1859,6 +1873,7 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
     """
     query = raw_query.strip()
     clean_lower = query.lower()
+    is_one_to_one = session_id == "one_to_one" or str(session_id).startswith("one_to_one")
 
     # Save user turn immediately into conversation memory for all interactions
     save_chat_turn(session_id, "user", query)
@@ -2024,6 +2039,64 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
         if session_id in LOCAL_MEMORY_STORE:
             LOCAL_MEMORY_STORE[session_id] = []
         return "Session memory cleared. Fresh context active, Harishan."
+
+    # 2.2. Autonomous Topic Monitoring Inquiries
+    is_monitored_topics_inquiry = bool(re.search(
+        r'\b(?:show|list|view|check|get|display|what|tell me|give me|any)\b.*?\b(?:monitored|tracked|monitoring)\s+(?:topic|topics|news|stories|story|feed|feeds)\b',
+        clean_lower
+    )) or any(q in clean_lower for q in [
+        "what news are you monitoring", "what are you monitoring", "monitored news",
+        "monitored topics", "monitored topic", "show monitored topics", "show monitored topic",
+        "list monitored topics", "list monitored topic", "tracked topics", "tracked topic",
+        "what topics are you tracking", "what topic are you tracking", "what stories are you monitoring",
+        "topics you are monitoring", "topic you are monitoring", "check monitored topics",
+        "check monitored topic", "any updates on monitored", "show monitoring topic", "show monitoring topics"
+    ])
+    if is_monitored_topics_inquiry:
+        try:
+            from app.services.topic_monitor_service import topic_monitor_service
+            ans = topic_monitor_service.get_active_topics_summary()
+            save_chat_turn(session_id, "user", query)
+            save_chat_turn(session_id, "assistant", ans)
+            return ans
+        except Exception:
+            pass
+
+    # 2.5. Real-Time Deterministic Clock & Date Service
+    time_queries = [
+        "what's the current time", "what is the current time", "what is the time",
+        "what's the time", "current time", "what time is it", "time now",
+        "tell me the time", "tell time", "whats the current time", "whats the time"
+    ]
+    date_queries = [
+        "what's today's date", "what is today's date", "what is the date",
+        "what's the date", "today's date", "current date", "what day is today",
+        "what day is it today", "whats todays date", "whats the date"
+    ]
+    is_time_query = any(clean_lower == t or clean_lower.startswith(t + " ") or clean_lower.endswith(" " + t) for t in time_queries)
+    is_date_query = any(clean_lower == d or clean_lower.startswith(d + " ") or clean_lower.endswith(" " + d) for d in date_queries)
+
+    if is_time_query:
+        now_dt = datetime.now()
+        time_str = now_dt.strftime("%I:%M %p").lstrip("0")
+        if is_one_to_one:
+            ans = f"It's {time_str} right now, {user_name}."
+        else:
+            ans = f"The current time is **{time_str}**, {user_name}."
+        save_chat_turn(session_id, "user", query)
+        save_chat_turn(session_id, "assistant", ans)
+        return ans
+
+    if is_date_query:
+        now_dt = datetime.now()
+        date_str = now_dt.strftime("%A, %B %d, %Y")
+        if is_one_to_one:
+            ans = f"Today is {date_str}, {user_name}."
+        else:
+            ans = f"Today's date is **{date_str}**, {user_name}."
+        save_chat_turn(session_id, "user", query)
+        save_chat_turn(session_id, "assistant", ans)
+        return ans
 
     # 3. Document Question Extraction (e.g. '100th qn')
     is_multi_request = any(k in clean_lower for k in ["random", "list", "all", "some", "multiple", "several"])
@@ -2556,7 +2629,7 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
         return ans
 
     # Live Weather Tool Integration via Open-Meteo API
-    weather_match = re.search(r'\b(?:weather|temperature|forecast|climate|rain|humidity)\b', clean_lower)
+    weather_match = re.search(r'\b(?:weather|temperature|forecast|climate|rain|raining|rainy|humidity|umbrella)\b', clean_lower)
     if weather_match and not any(k in clean_lower for k in ["news", "app", "code", "file", "folder", "lock"]):
         city_candidate = user_city or "Chennai"
         city_m = re.search(r'\b(?:in|for|at|of)\s+([a-zA-Z\s]{3,25})\b', clean_lower)
@@ -2567,15 +2640,97 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
                 city_candidate = extracted
 
         try:
-            from app.tools.weather import get_weather
-            weather_report = await get_weather(city_candidate)
-            if weather_report and "Weather in" in weather_report:
-                if effective_language == "tamil":
-                    ans = f"வானிலை அறிக்கை ({city_candidate}):\n{weather_report}"
-                elif effective_language == "tanglish":
-                    ans = f"{city_candidate} oda live weather report:\n{weather_report}"
+            from app.tools.weather import get_weather_data
+            w_data = await get_weather_data(city_candidate)
+            if w_data:
+                city_name = w_data.get("city", city_candidate)
+                curr_temp = w_data.get("temperature_celsius")
+                feels_like = w_data.get("feels_like_celsius")
+                cond = w_data.get("condition", "Clear")
+                hum = w_data.get("humidity_percent")
+                wind = w_data.get("wind_speed_kmh")
+
+                today_rain_pct = w_data.get("today_rain_chance", 0)
+                today_rain_mm = w_data.get("today_rain_sum_mm", 0.0)
+
+                tom_rain_pct = w_data.get("tomorrow_rain_chance", 0)
+                tom_rain_mm = w_data.get("tomorrow_rain_sum_mm", 0.0)
+                tom_cond = w_data.get("tomorrow_condition", "Clear")
+                tom_max = w_data.get("tomorrow_temp_max")
+                tom_min = w_data.get("tomorrow_temp_min")
+
+                # Extract yesterday data
+                yest_rain_pct = w_data.get("yesterday_rain_chance", 0)
+                yest_rain_mm = w_data.get("yesterday_rain_sum_mm", 0.0)
+                yest_cond = w_data.get("yesterday_condition", "Clear")
+                yest_max = w_data.get("yesterday_temp_max")
+                yest_min = w_data.get("yesterday_temp_min")
+
+                # Detect user intent: Yesterday vs Tomorrow vs Rain possibilities vs General overview
+                is_yesterday_query = any(k in clean_lower for k in ["yesterday", "prev day", "previous day", "last night", "was it raining", "did it rain"])
+                is_tomorrow_query = any(k in clean_lower for k in ["tomorrow", "tmrw", "next day"])
+                is_rain_query = any(k in clean_lower for k in ["rain", "raining", "rainy", "shower", "showers", "precipitation", "umbrella", "possib", "chance"])
+
+                if is_yesterday_query:
+                    if yest_rain_mm > 0.5 or yest_rain_pct >= 40:
+                        yest_verdict = f"Yes, rain was recorded in {city_name} yesterday ({yest_rain_mm} mm of precipitation with {yest_rain_pct}% rain probability)."
+                    elif yest_rain_mm > 0.0:
+                        yest_verdict = f"There was very light trace rain in {city_name} yesterday ({yest_rain_mm} mm, {yest_rain_pct}% probability)."
+                    else:
+                        yest_verdict = f"No, it did not rain in {city_name} yesterday (0.0 mm of precipitation, {yest_cond.lower()} skies)."
+
+                    if is_one_to_one:
+                        ans = f"{yest_verdict} Yesterday's temperature reached a high of {yest_max}°C and low of {yest_min}°C."
+                    else:
+                        ans = (
+                            f"**Yesterday's Weather & Rain Report for {city_name}, {user_name}:**\n"
+                            f"- **Rain Recorded:** {yest_verdict}\n"
+                            f"- **Precipitation Sum:** {yest_rain_mm} mm\n"
+                            f"- **Conditions:** {yest_cond}\n"
+                            f"- **Temperatures:** {yest_min}°C to {yest_max}°C"
+                        )
+                elif is_tomorrow_query:
+                    if tom_rain_pct < 30:
+                        rain_verdict = f"Rain is unlikely in {city_name} tomorrow (only a {tom_rain_pct}% chance, {tom_rain_mm} mm expected)."
+                    elif tom_rain_pct < 65:
+                        rain_verdict = f"There is a moderate {tom_rain_pct}% chance of scattered showers in {city_name} tomorrow ({tom_rain_mm} mm expected)."
+                    else:
+                        rain_verdict = f"Yes, rain is very likely in {city_name} tomorrow with a {tom_rain_pct}% chance of precipitation ({tom_rain_mm} mm expected)."
+
+                    if is_one_to_one:
+                        ans = f"{rain_verdict} Expect {tom_cond.lower()} skies with temperatures between {tom_min}°C and {tom_max}°C."
+                    else:
+                        ans = (
+                            f"**Tomorrow's Weather & Rain Forecast for {city_name}, {user_name}:**\n"
+                            f"- **Rain Probability:** {tom_rain_pct}% ({rain_verdict})\n"
+                            f"- **Expected Precipitation:** {tom_rain_mm} mm\n"
+                            f"- **Conditions:** {tom_cond}\n"
+                            f"- **Temperatures:** {tom_min}°C to {tom_max}°C"
+                        )
+                elif is_rain_query:
+                    if is_one_to_one:
+                        ans = f"In {city_name}, the rain probability today is {today_rain_pct}% ({cond.lower()}), and tomorrow it drops to {tom_rain_pct}% with {tom_cond.lower()} skies and a high of {tom_max}°C."
+                    else:
+                        ans = (
+                            f"**Rain Possibilities for {city_name}, {user_name}:**\n"
+                            f"- **Today:** {today_rain_pct}% chance of rain (Current: {cond.lower()}, {curr_temp}°C)\n"
+                            f"- **Tomorrow:** {tom_rain_pct}% chance of rain ({tom_cond.lower()}, {tom_min}°C to {tom_max}°C, {tom_rain_mm} mm)"
+                        )
                 else:
-                    ans = f"Here is the live weather forecast for {city_candidate}, {user_name}:\n\n{weather_report}"
+                    if is_one_to_one:
+                        ans = f"Currently in {city_name}, it's {curr_temp}°C and {cond.lower()} (humidity {hum}%, feels like {feels_like}°C). Tomorrow will be {tom_cond.lower()} with a high of {tom_max}°C and a {tom_rain_pct}% chance of rain."
+                    else:
+                        ans = (
+                            f"Here is the live weather forecast for {city_name}, {user_name}:\n\n"
+                            f"Weather in {city_name}, {w_data.get('country', '')}:\n"
+                            f"Condition: {cond}\n"
+                            f"Temperature: {curr_temp}°C\n"
+                            f"Feels like: {feels_like}°C\n"
+                            f"Humidity: {hum}%\n"
+                            f"Wind: {wind} km/h\n"
+                            f"Rain Chance Today: {today_rain_pct}%\n"
+                            f"Tomorrow: {tom_cond}, {tom_min}°C to {tom_max}°C (Rain: {tom_rain_pct}%)"
+                        )
                 save_chat_turn(session_id, "user", query)
                 save_chat_turn(session_id, "assistant", ans)
                 return ans
@@ -3664,13 +3819,13 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
         "show me an image", "show me a photo", "show me image", "show the image", "show an image", "show image", "show photo", "show logo",
         "design a logo", "design logo", "make logo", "create logo",
         "show me ", "give me ", "give ", "show ", "send me ", "send image", "send the image", "send photo", "send logo"
-    ]) and any(w in clean_lower for w in ["image", "images", "picture", "pictures", "photo", "photos", "wallpaper", "wallpapers", "portrait", "portraits", "drawing", "illustration", "art", "pic", "pics", "logo", "logos", "emblem", "badge", "icon", "banner"])) or bool(re.search(
+    ]) and bool(re.search(r'\b(?:image|images|picture|pictures|photo|photos|wallpaper|wallpapers|portrait|portraits|drawing|illustration|art|pic|pics|logo|logos|emblem|badge|icon|banner)\b', clean_lower))) or bool(re.search(
         r'\b(?:generate|render|make|create|draw|give|show|send|design)\s+(?:that|this|it|another|an?\s+extra)\s*(?:image|picture|photo|wallpaper|logo|icon)?',
         clean_lower
     )) or bool(re.search(
         r'\b(?:with|in)\s+(?:\d{3,5}\s*(?:[xX*×]|by)\s*\d{3,5}|\d{3,4}p|4k|8k|1440p|1080p|720p)\s*(?:size|resolution|res)?\b',
         clean_lower
-    ) and any(w in clean_lower for w in ["generate", "render", "image", "photo", "wallpaper", "logo", "make", "create", "draw", "that", "this"])) or (
+    ) and bool(re.search(r'\b(?:generate|render|image|photo|wallpaper|logo|make|create|draw|that|this)\b', clean_lower))) or (
         bool(re.search(r'^[a-zA-Z0-9\s]{2,40}\s+(?:image|images|photo|photos|picture|pictures|wallpaper|wallpapers|portrait|portraits|drawing|drawings|illustration|illustrations|pic|pics|logo|logos|icon|icons)$', clean_lower)) and not any(clean_lower.startswith(q) for q in ["what", "who", "where", "how", "why", "is", "explain"])
     )
 
@@ -3860,7 +4015,8 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
     ])
 
     is_image_gen_query = (is_direct_img_command or is_standalone_visual_prompt or is_hairstyle_or_makeover_query or is_followup_image_gen) and not is_document_or_text_query and not any(k in clean_lower for k in [
-        "prompt for", "prompts for", "give me a prompt", "write a prompt", "generate a prompt", "generate prompt"
+        "prompt for", "prompts for", "give me a prompt", "write a prompt", "generate a prompt", "generate prompt",
+        "monitored topic", "monitored topics", "tracked topic", "tracked topics", "monitoring topic", "monitoring topics"
     ])
 
     if is_image_gen_query:
@@ -4054,14 +4210,27 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
     active_doc = SESSION_DOC_CACHE.get(session_id) or LATEST_UPLOADED_DOC_CONTENT
     is_doc_or_file_query = any(k in clean_lower for k in ["pdf", "document", "doc", "file", "question", "questions", "qn", "qns", "q&a", "summary", "read this", "from the", "in the pdf", "in this file"])
 
+    is_companion_conversational_query = any(k in clean_lower for k in [
+        "can i sleep", "should i sleep", "shall i sleep", "can you hear me", "can we chat",
+        "can we talk", "are you there", "are you awake", "talk to me", "talk with me",
+        "how are you", "how are you doing", "what are you doing", "who are you",
+        "tell me a joke", "what is your name", "test one more command on u", "test a command on you",
+        "command on you", "command on u"
+    ])
+
     user_urls = extract_urls_from_text(query)
-    needs_web_search = bool(user_urls) or (is_explicit_web_search and not (active_doc and is_doc_or_file_query and not user_urls))
+    needs_web_search = bool(user_urls) or (
+        is_explicit_web_search
+        and not is_companion_conversational_query
+        and not (active_doc and is_doc_or_file_query and not user_urls)
+    )
 
     live_web_context = ""
     if needs_web_search:
         search_query = contextualized_query
         try:
-            live_web_context = await asyncio.wait_for(gather_all_web_context(search_query), timeout=8.0)
+            web_timeout = 14.0 if user_urls else 8.0
+            live_web_context = await asyncio.wait_for(gather_all_web_context(search_query), timeout=web_timeout)
             if live_web_context:
                 print(f"[CommandExecutor] Live Web Context injected ({len(live_web_context)} chars) for: {search_query}", flush=True)
         except Exception as e:
@@ -4108,66 +4277,102 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
             from groq import Groq
             client = Groq(api_key=groq_key)
 
-            system_instruction = agent_config.get_system_instruction(
-                agent_name=agent_name,
-                user_name=user_name,
-                user_age=user_age,
-                user_email=user_email,
-                user_city=user_city,
-                language=effective_language,
-                live_web_context=live_web_context
-            )
-
-            # Retrieve past semantic memory context
-            try:
-                mem_ctx = await friday_memory_manager.fetch_memory_context(contextualized_query, user_id=user_name, top_k=4)
-                if mem_ctx.get("context_text"):
+            if is_one_to_one:
+                system_instruction = (
+                    f"You are {agent_name}, {user_name}'s close personal companion speaking in a live, direct one-to-one conversation.\n"
+                    f"Current time: {datetime.now().strftime('%A, %B %d, %Y, %I:%M %p')}.\n\n"
+                    f"STRICT ONE-TO-ONE SPOKEN DIALOGUE RULES:\n"
+                    f"1. HUMAN-TO-HUMAN BREVITY: Answer directly in 2 to 3 natural spoken sentences (around 35 to 65 words maximum). Talk naturally just like two people in a room.\n"
+                    f"2. ZERO ESSAY STRUCTURE: Absolutely NO headers (###), NO bullet points (*, -), NO numbered lists (1., 2.), and NO breakdown intros like 'Here is a breakdown:'. Output ONLY clean, continuous spoken sentences.\n"
+                    f"3. ZERO PREAMBLE OR LECTURES: Do NOT make filler comments about time, late-night coding, drinking water, taking deep breaths, or emotional lectures. Jump straight into the direct answer.\n"
+                    f"4. BALANCED & DIRECT: When asked about controversial events, politics, or tragedies (such as DMK vs TVK), state the balanced factual consensus directly in 2-3 spoken sentences without taking sides or creating long legal breakdowns.\n"
+                    f"5. COMPLETE THOUGHTS: Complete all sentences cleanly.\n"
+                    f"6. CONVERSATIONAL CONTINUITY & REACTIONS: When {user_name} reacts with surprise, disbelief, frustration, or exclamations (e.g. 'what the fuck', 'wtf', 'wait what', 'are you serious', 'huh?'), he is reacting directly to what you just said in the immediately preceding message. NEVER define the phrase like a dictionary or lecture him on slang. Acknowledge what you said, immediately correct any mistake, and respond naturally to his reaction.\n"
+                    f"7. CONSTITUTIONAL INTEGRITY & PREMISE AUDITING (ZERO SYCOPHANCY):\n"
+                    f"   - When a query assumes or addresses a person with a constitutional office they do not officially hold (e.g. calling an actor, founder, or candidate CM, PM, President, or Governor), do NOT adopt the false title and NEVER invent fictitious official duties, secretariats, or swearing-in ceremonies.\n"
+                    f"   - Factually clarify their real role alongside the actual incumbent officeholder (e.g. M. K. Stalin is the Chief Minister of Tamil Nadu), and state what is actually known about the individual.\n"
+                    f"8. WIKIPEDIA VANDALISM & FAN-FICTION RESILIENCE:\n"
+                    f"   - Open web search snippets often contain internet vandalism, hypothetical election scenarios, or fan fiction claiming individuals were sworn into office.\n"
+                    f"   - NEVER accept unverified wiki edits or speculative election victory scenarios as constitutional facts.\n"
+                    f"9. ZERO 'NO INTERNET' REFUSALS FOR NEWS & CURRENT EVENTS:\n"
+                    f"   - NEVER claim 'I do not have access to real-time live news feeds or the internet' or 'I cannot fetch today's headlines'. You have live web search feeds enabled.\n"
+                    f"   - When asked for headlines or current events, synthesize the headlines from your live web intelligence feed directly in 2-3 spoken sentences. If breaking feeds are sparse, discuss the ongoing state/national developments naturally."
+                )
+                if live_web_context:
                     system_instruction += (
-                        f"\n\n=== PAST USER CONVERSATION CONTEXT ===\n"
-                        f"{mem_ctx['context_text']}\n"
-                        f"Note: The items above reflect past conversational exchanges. For all real-world facts, public figures, current offices, biographies, and news, rely strictly on verified external knowledge, NEVER on past conversational chatter.\n"
-                        f"======================================"
+                        f"\n\n=== LIVE WEB SEARCH CONTEXT (Raw external snippets — evaluate critically; do NOT adopt speculative election projections, fan fiction, or wiki vandalism as constitutional facts) ===\n"
+                        f"{live_web_context}\n"
+                        f"========================================================================================================\n"
                     )
+            else:
+                system_instruction = agent_config.get_system_instruction(
+                    agent_name=agent_name,
+                    user_name=user_name,
+                    user_age=user_age,
+                    user_email=user_email,
+                    user_city=user_city,
+                    language=effective_language,
+                    live_web_context=live_web_context
+                )
+
+            # Inject proactive updates on monitored topics from Autonomous Topic Monitor
+            try:
+                from app.services.topic_monitor_service import topic_monitor_service
+                pending_topic_ctx = topic_monitor_service.get_pending_notifications_prompt_context()
+                if pending_topic_ctx:
+                    system_instruction += f"\n\n{pending_topic_ctx}\n"
             except Exception:
                 pass
 
-            # One-to-One Mode Persona & Cross-Conversation Memory Linker
-            if is_one_to_one:
-                system_instruction += (
-                    f"\n\n=== ONE-TO-ONE LIVE PERSON-TO-PERSON CONVERSATION MODE ACTIVE ===\n"
-                    f"You are currently talking directly with {user_name} in 'One to One' live person-to-person conversation mode.\n"
-                    f"- Talk naturally, warmly, directly, and engagingly like a real human friend and intelligent companion speaking face-to-face.\n"
-                    f"- No wake words are required in this mode.\n"
-                    f"- You know both this individual One-to-One conversation and his ongoing Chat Agent conversations.\n"
-                    f"- Keep your spoken responses direct, conversational, human, and clear."
-                )
+                # Retrieve past semantic memory context
                 try:
-                    # Ingest recent turns from other active chat agent sessions for shared cross-context awareness
-                    other_sessions = [s for s in LOCAL_MEMORY_STORE.keys() if s != session_id and LOCAL_MEMORY_STORE[s]]
-                    if other_sessions:
-                        latest_other = other_sessions[-1]
-                        recent_other = LOCAL_MEMORY_STORE[latest_other][-4:]
-                        if recent_other:
-                            other_text = "\n".join([f"- {m['role']}: {m['message'][:200]}" for m in recent_other])
-                            system_instruction += (
-                                f"\n\n=== SHARED CHAT AGENT CONVERSATION CONTEXT ({latest_other}) ===\n"
-                                f"{other_text}\n"
-                                f"=================================================================="
-                            )
+                    mem_ctx = await friday_memory_manager.fetch_memory_context(contextualized_query, user_id=user_name, top_k=4)
+                    if mem_ctx.get("context_text"):
+                        system_instruction += (
+                            f"\n\n=== PAST USER CONVERSATION CONTEXT ===\n"
+                            f"{mem_ctx['context_text']}\n"
+                            f"Note: The items above reflect past conversational exchanges. For all real-world facts, public figures, current offices, biographies, and news, rely strictly on verified external knowledge, NEVER on past conversational chatter.\n"
+                            f"======================================"
+                        )
                 except Exception:
                     pass
 
             active_doc = SESSION_DOC_CACHE.get(session_id) or LATEST_UPLOADED_DOC_CONTENT
-            is_doc_or_image_query = any(k in clean_lower for k in [
-                "image", "picture", "photo", "document", "file", "this", "it", "who is", "what is",
-                "describe", "analyze", "explain", "look at", "qn", "question", "summary", "read", "person in", "uploaded"
-            ])
+            is_doc_or_image_query = (
+                bool(user_urls)
+                or any(k in clean_lower for k in [
+                    "image", "picture", "photo", "document", "file", "this", "it", "who is", "what is",
+                    "describe", "analyze", "explain", "look at", "qn", "question", "questions", "summary",
+                    "read", "person in", "uploaded", "video", "short", "shorts", "clip", "youtube"
+                ])
+            )
             if active_doc and is_doc_or_image_query:
                 system_instruction += (
                     f"\n\n=== CRITICAL: ACTIVE SESSION DOCUMENT & IMAGE ANALYSIS CONTEXT ===\n"
                     f"{active_doc}\n"
                     f"================================================="
                 )
+
+            is_detailed_requested = any(k in clean_lower for k in [
+                "explain in detail", "in detail", "in-depth", "indepth", "detailed",
+                "long answer", "explain more", "describe more", "elaborate",
+                "deep dive", "comprehensive", "full breakdown", "write an essay",
+                "full guide", "step by step guide", "tell me everything"
+            ])
+            if not is_one_to_one:
+                if is_detailed_requested:
+                    system_instruction += (
+                        f"\n\nUSER DEPTH PREFERENCE: The user has explicitly requested an in-depth, detailed explanation. Provide a thorough, comprehensive, well-structured answer with full context."
+                    )
+                else:
+                    system_instruction += (
+                        f"\n\nDEFAULT BREVITY & ADAPTIVE SIZING RULE (CRITICAL):\n"
+                        f"- The user has NOT asked for a long or detailed breakdown. Therefore, KEEP YOUR RESPONSE SHORT, FOCUSED, AND DIGESTIBLE (1 to 3 concise paragraphs or 3-5 bullet points, around 80 to 180 words).\n"
+                        f"- NEVER output massive 8-section essays, multi-table manuals, or textbook breakdowns unless explicitly asked.\n"
+                        f"- When analyzing a link or article, summarize the core findings in 3 to 4 crisp bullet points. Do NOT dump the entire article.\n"
+                        f"- For short follow-up questions (e.g. 'when it gets normal', 'why', 'how does it work'), answer directly in 2 to 3 sentences.\n"
+                        f"- NEVER append unsolicited bedtime or wellness reminders ('drink water, stretch, it is late, rest your eyes')."
+                    )
 
             system_instruction += (
                 f"\n\nCRITICAL OUTPUT FORMATTING RULE:\n"
@@ -4203,19 +4408,48 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
 
             messages = [{"role": "system", "content": system_instruction}]
             messages.extend(formatted_history)
-            user_msg_content = f"Verified External Data:\n{live_web_context}\n\nUser Query: {query}" if live_web_context else query
+            user_msg_content = (
+                f"Web Search Intelligence (Raw external web snippets — evaluate critically; do NOT adopt speculative election projections, fan fiction, or wiki vandalism as constitutional facts):\n"
+                f"{live_web_context}\n\n"
+                f"User Query: {query}"
+            ) if live_web_context else query
             messages.append({"role": "user", "content": user_msg_content})
 
             candidates = [
-                os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip().strip('"').strip("'"),
-                "qwen/qwen3.8-27b",
+                os.getenv("GROQ_MODEL", "").strip().strip('"').strip("'"),
                 "openai/gpt-oss-120b",
                 "openai/gpt-oss-20b",
+                "qwen/qwen3.8-27b",
                 "allam-2-7b",
             ]
             seen_models = set()
             unique_candidates = [m for m in candidates if m and not (m in seen_models or seen_models.add(m))]
 
+            def clean_one_to_one_text(text: str) -> str:
+                if not text:
+                    return text
+                # Strip markdown headers
+                text = re.sub(r"#{1,6}\s+[^\n]+", "", text)
+                # Strip bullet indicators (*, -, numbers like 1.)
+                text = re.sub(r"(?m)^\s*[\*\-]\s*", "", text)
+                text = re.sub(r"(?m)^\s*\d+\.\s*", "", text)
+                # Strip bold headers used as outlines (e.g. **Reckless Mismanagement:**)
+                text = re.sub(r"\*\*([^\*]+)\*\*:\s*", r"\1 - ", text)
+                # Strip breakdown intros
+                text = re.sub(r"(?i)here is a breakdown[^\n]*\n?", "", text)
+                # Collapse whitespace and newlines into smooth spoken prose
+                lines = [line.strip() for line in text.split("\n") if line.strip()]
+                text = " ".join(lines).strip()
+                # Ensure no broken unfinished trailing sentences
+                if text and text[-1] not in ".!?":
+                    last_punct = max(text.rfind("."), text.rfind("!"), text.rfind("?"))
+                    if last_punct > 40:
+                        text = text[:last_punct + 1].strip()
+                    else:
+                        text = text.rstrip(" ,;:-") + "."
+                return text
+
+            max_tokens_val = 320 if is_one_to_one else (2048 if is_detailed_requested else 450)
             for candidate in unique_candidates:
                 try:
                     completion = await asyncio.to_thread(
@@ -4223,13 +4457,20 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
                         model=candidate,
                         messages=messages,
                         temperature=0.25,
-                        max_tokens=2048
+                        max_tokens=max_tokens_val
                     )
                     ans = completion.choices[0].message.content.strip()
                     if ans:
                         clean_ans = sanitize_backend_output(ans) or ans
+                        if is_one_to_one and clean_ans:
+                            clean_ans = clean_one_to_one_text(clean_ans)
                         if clean_ans and len(clean_ans) > 2:
                             save_chat_turn(session_id, "assistant", clean_ans)
+                            try:
+                                from app.services.topic_monitor_service import topic_monitor_service
+                                topic_monitor_service.auto_register_from_interaction(query, clean_ans)
+                            except Exception:
+                                pass
                             return clean_ans
                 except Exception as model_err:
                     err_str = str(model_err)
@@ -4247,12 +4488,19 @@ async def execute_in_backend(raw_query: str, session_id: str = "default", langua
                                 model=candidate,
                                 messages=minimal_messages,
                                 temperature=0.25,
-                                max_tokens=2048
+                                max_tokens=max_tokens_val
                             )
                             ans_retry = retry_comp.choices[0].message.content.strip()
                             if ans_retry:
                                 clean_ans = sanitize_backend_output(ans_retry)
+                                if is_one_to_one and clean_ans:
+                                    clean_ans = clean_one_to_one_text(clean_ans)
                                 save_chat_turn(session_id, "assistant", clean_ans)
+                                try:
+                                    from app.services.topic_monitor_service import topic_monitor_service
+                                    topic_monitor_service.auto_register_from_interaction(query, clean_ans)
+                                except Exception:
+                                    pass
                                 return clean_ans
                         except Exception as retry_err:
                             print(f"[CommandExecutor TPM Minimal Retry Error] {candidate}: {retry_err}", flush=True)

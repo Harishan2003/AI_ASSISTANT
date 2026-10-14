@@ -63,6 +63,21 @@ def fetch_webpage_content(url: str, max_chars: int = 3500) -> dict:
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
+    # 0. Check if URL is a Video Link (YouTube, Shorts, Direct Video)
+    try:
+        from app.services.video_analysis_service import analyze_video_url
+        video_info = analyze_video_url(url, max_chars=max_chars)
+        if video_info and video_info.get("success"):
+            return {
+                "url": url,
+                "title": video_info.get("title") or url,
+                "content": video_info.get("content") or "",
+                "success": True,
+                "is_video": True
+            }
+    except Exception as e:
+        logger.debug(f"[WebContext] Video analysis check note: {e}")
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -259,7 +274,7 @@ async def fetch_tavily_search_context(query: str) -> str:
                 data = response.json()
                 sections = []
                 if data.get("answer"):
-                    sections.append(f"### Verified Real-Time Web Answer Summary:\n{data['answer']}")
+                    sections.append(f"### Web Search Answer Summary:\n{data['answer']}")
                 results = data.get("results", [])
                 if results:
                     snippets = [f"- **{r.get('title', 'Source')}**: {r.get('content', '')}" for r in results if r.get('content')]
@@ -320,7 +335,7 @@ async def fetch_wikipedia_context(query: str) -> str:
                             pages = page_data.get("query", {}).get("pages", {})
                             for page_id, page_info in pages.items():
                                 if "extract" in page_info and page_info["extract"].strip():
-                                    return sanitize_text(f"Wikipedia Verified Article [{top_title}]: {page_info['extract'][:1500]}")
+                                    return sanitize_text(f"Wikipedia Article Extract [{top_title}]: {page_info['extract'][:1500]}")
             except Exception:
                 continue
         return ""
@@ -406,10 +421,18 @@ def fetch_live_news_rss_sync(query: str, max_items: int = 12) -> str:
 
         tokens = set(re.findall(r'\b[a-z0-9\-]+\b', q_lower))
 
+        # Multi-source RSS feed discovery
         urls_to_try = []
 
-        # If user has a specific query, search for it first!
-        if clean and len(clean) >= 2:
+        is_tn_query = any(k in q_lower for k in ["tamil nadu", "tamilnadu", "chennai", "madurai", "coimbatore", "tn news"])
+        if is_tn_query:
+            urls_to_try.append('https://news.google.com/rss/search?q=Tamil+Nadu+news&hl=en-IN&gl=IN&ceid=IN:en')
+            urls_to_try.append('https://www.thehindu.com/news/national/tamil-nadu/feeder/default.rss')
+            urls_to_try.append('https://timesofindia.indiatimes.com/rssfeeds/2950623.cms')
+            urls_to_try.append('https://www.thehindu.com/news/cities/chennai/feeder/default.rss')
+
+        # If user has a specific query, search for it in Google News first
+        if clean and len(clean) >= 2 and not is_tn_query:
             urls_to_try.append(f'https://news.google.com/rss/search?q={urllib.parse.quote(clean + " when:7d")}&hl=en-IN&gl=IN&ceid=IN:en')
             urls_to_try.append(f'https://news.google.com/rss/search?q={urllib.parse.quote(clean)}&hl=en-IN&gl=IN&ceid=IN:en')
 
@@ -417,38 +440,65 @@ def fetch_live_news_rss_sync(query: str, max_items: int = 12) -> str:
         if tokens.intersection({"world", "international", "global", "foreign", "geopolitics"}) and (not clean or clean in {"world", "news", "international"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-IN&gl=IN&ceid=IN:en')
             urls_to_try.append('http://feeds.bbci.co.uk/news/world/rss.xml')
-        elif tokens.intersection({"entertainment", "cinema", "movie", "film", "bollywood", "hollywood", "kollywood", "tollywood", "actor", "actress", "celebrity"}) and (not clean or clean in {"entertainment", "cinema", "movie", "film", "news"}):
+        elif tokens.intersection({"entertainment", "cinema", "movie", "film", "bollywood", "hollywood", "kollywood", "tollywood", "actor", "actress", "celebrity"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=en-IN&gl=IN&ceid=IN:en')
-        elif tokens.intersection({"tech", "technology", "ai", "gadget", "software"}) and (not clean or clean in {"tech", "technology", "news"}):
+        elif tokens.intersection({"tech", "technology", "ai", "gadget", "software"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-IN&gl=IN&ceid=IN:en')
             urls_to_try.append('http://feeds.bbci.co.uk/news/technology/rss.xml')
-        elif tokens.intersection({"business", "finance", "stock", "stocks", "market", "economy"}) and (not clean or clean in {"business", "market", "finance", "news"}):
+        elif tokens.intersection({"business", "finance", "stock", "stocks", "market", "economy"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-IN&gl=IN&ceid=IN:en')
             urls_to_try.append('http://feeds.bbci.co.uk/news/business/rss.xml')
-        elif tokens.intersection({"sport", "sports", "cricket", "football", "ipl"}) and (not clean or clean in {"sports", "sport", "news"}):
+        elif tokens.intersection({"sport", "sports", "cricket", "football", "ipl"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/SPORTS?hl=en-IN&gl=IN&ceid=IN:en')
             urls_to_try.append('http://feeds.bbci.co.uk/sport/rss.xml')
-        elif tokens.intersection({"science", "space", "nasa", "isro"}) and (not clean or clean in {"science", "space", "news"}):
+        elif tokens.intersection({"science", "space", "nasa", "isro"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=en-IN&gl=IN&ceid=IN:en')
-            urls_to_try.append('http://feeds.bbci.co.uk/news/science_and_environment/rss.xml')
-        elif tokens.intersection({"india", "national", "nation"}) and not clean:
+        elif tokens.intersection({"india", "national", "nation"}):
             urls_to_try.append('https://news.google.com/rss/headlines/section/topic/NATION?hl=en-IN&gl=IN&ceid=IN:en')
+            urls_to_try.append('https://www.thehindu.com/news/national/feeder/default.rss')
+            urls_to_try.append('https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms')
 
-        # Fallback to top news headlines
+        # Robust fallbacks for top headlines
         urls_to_try.append('https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en')
+        urls_to_try.append('https://timesofindia.indiatimes.com/rssfeedstopstories.cms')
+        urls_to_try.append('https://feeds.feedburner.com/ndtvnews-top-stories')
 
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+            'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+        }
 
         for url in urls_to_try:
             try:
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=4.0) as resp:
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
                     xml_content = resp.read()
                     headlines = _parse_rss_xml(xml_content, max_items=max_items)
                     if headlines:
-                        return "### Real-Time Live Breaking News (Google News RSS Feed):\n" + "\n".join(headlines)
+                        source_label = "Tamil Nadu & Regional Feeds" if is_tn_query else "Live Breaking News"
+                        return f"### Real-Time Live Headlines ({source_label}):\n" + "\n".join(headlines)
             except Exception:
                 continue
+
+        # Secondary live search fallback if RSS feeds were unreachable
+        fallback_term = "Tamil Nadu news today latest" if is_tn_query else (clean or "India breaking news today")
+        try:
+            ddg_url = 'https://html.duckduckgo.com/html/?q=' + urllib.parse.quote(fallback_term)
+            req = urllib.request.Request(ddg_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                html_txt = resp.read().decode('utf-8', errors='ignore')
+                snips = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', html_txt, flags=re.DOTALL)
+                titles = re.findall(r'<a[^>]*class="result__title"[^>]*>(.*?)</a>', html_txt, flags=re.DOTALL)
+                combined = []
+                for i in range(min(len(titles), len(snips), 8)):
+                    t_str = re.sub(r'<.*?>', '', titles[i]).strip()
+                    s_str = re.sub(r'<.*?>', '', snips[i]).strip()
+                    if t_str and s_str:
+                        combined.append(f"- **{t_str}**: {s_str}")
+                if combined:
+                    return "### Real-Time Live News Reports (Web News Feed):\n" + "\n".join(combined)
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"[WebContext News RSS Notice]: {e}", flush=True)
@@ -479,22 +529,26 @@ async def gather_all_web_context(query: str) -> str:
                         f"Page Title: {page['title']}\n"
                         f"Extracted Page Content:\n{page['content']}"
                     )
+            # If we successfully extracted content from the user's direct links (e.g. video transcripts or articles),
+            # return immediately without slow general search delays.
+            if url_contexts:
+                return sanitize_text("\n\n".join(url_contexts).strip())
 
         q_lower = query.lower()
         is_news_query = any(k in q_lower for k in [
             "news", "headline", "headlines", "breaking", "what happened today", "current events",
-            "latest updates", "updates on", "what's happening", "whats happening",
+            "latest updates", "updates on", "what's happening", "whats happening", "today's", "todays",
             "today", "yesterday", "world", "international", "global", "sports", "cricket",
             "tech", "technology", "business", "market", "sensex", "nifty", "entertainment",
             "cinema", "movie", "film", "politics", "gold rate", "stock price", "who won",
-            "score", "match", "current"
+            "score", "match", "current", "tamilnadu", "tamil nadu", "chennai", "bulletin", "affairs"
         ])
 
         async def _safe_news():
             if not is_news_query:
                 return ""
             try:
-                return await asyncio.wait_for(fetch_live_news_rss(query), timeout=3.8)
+                return await asyncio.wait_for(fetch_live_news_rss(query), timeout=5.0)
             except Exception:
                 return ""
 
@@ -532,7 +586,7 @@ async def gather_all_web_context(query: str) -> str:
         if isinstance(tavily_res, str) and tavily_res:
             parts.append(tavily_res)
         if isinstance(wiki_res, str) and wiki_res:
-            parts.append(f"--- Wikipedia Verified Knowledge ---\n{wiki_res}")
+            parts.append(f"--- Wikipedia Knowledge Extract ---\n{wiki_res}")
         if isinstance(news_res, str) and news_res:
             parts.append(news_res)
 
